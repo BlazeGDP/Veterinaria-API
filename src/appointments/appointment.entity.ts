@@ -1,4 +1,11 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import {
+  Column,
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
+
 import { Pet } from '../pets/pet.entity';
 
 export enum AppointmentStatus {
@@ -7,29 +14,31 @@ export enum AppointmentStatus {
   CANCELLED = 'cancelled',
 }
 
-@Entity({ name: 'appointments' })
+@Entity('appointments')
 export class Appointment {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn({ type: 'bigint' })
+  id!: string;
 
   @Column({ type: 'timestamptz' })
-  fecha: Date;
+  fecha!: Date;
 
   @Column({ type: 'text' })
-  motivo: string;
+  motivo!: string;
 
   @Column({
-    type: 'enum',
-    enum: AppointmentStatus,
+    type: 'varchar',
+    length: 20,
     default: AppointmentStatus.SCHEDULED,
   })
-  estado: AppointmentStatus;
+  estado!: AppointmentStatus;
+
+  @Column({ name: 'pet_id', type: 'bigint' })
+  petId!: string;
 
   @ManyToOne(() => Pet, (pet) => pet.appointments, {
-    nullable: false,
     onDelete: 'CASCADE',
     onUpdate: 'CASCADE',
   })
   @JoinColumn({ name: 'pet_id' })
-  pet: Pet;
+  pet!: Pet;
 }
