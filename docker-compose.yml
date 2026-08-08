@@ -1,14 +1,19 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16
+    container_name: veterinaria-postgres
+    restart: unless-stopped
+
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=veterinaria
+      POSTGRES_DB: veterinaria
+      POSTGRES_USER: veterinaria_user
+      POSTGRES_PASSWORD: veterinaria_password
+
     ports:
       - "5432:5432"
+
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - veterinaria_postgres_data:/var/lib/postgresql/data
 
 volumes:
-  pgdata:
+  veterinaria_postgres_data:

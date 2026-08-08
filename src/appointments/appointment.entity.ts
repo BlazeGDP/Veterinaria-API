@@ -19,10 +19,14 @@ export class Appointment {
   @PrimaryGeneratedColumn({ type: 'bigint' })
   id!: string;
 
-  @Column({ type: 'timestamptz' })
+  @Column({
+    type: 'timestamptz',
+  })
   fecha!: Date;
 
-  @Column({ type: 'text' })
+  @Column({
+    type: 'text',
+  })
   motivo!: string;
 
   @Column({
@@ -32,13 +36,18 @@ export class Appointment {
   })
   estado!: AppointmentStatus;
 
-  @Column({ name: 'pet_id', type: 'bigint' })
+  @Column({
+    name: 'pet_id',
+    type: 'bigint',
+  })
   petId!: string;
 
   @ManyToOne(() => Pet, (pet) => pet.appointments, {
     onDelete: 'CASCADE',
     onUpdate: 'CASCADE',
   })
-  @JoinColumn({ name: 'pet_id' })
+  @JoinColumn({
+    name: 'pet_id',
+  })
   pet!: Pet;
 }

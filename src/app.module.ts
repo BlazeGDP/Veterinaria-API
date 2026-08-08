@@ -17,7 +17,6 @@ import { AppointmentsModule } from './appointments/appointments.module';
 
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-
       inject: [ConfigService],
 
       useFactory: (configService: ConfigService) =>
