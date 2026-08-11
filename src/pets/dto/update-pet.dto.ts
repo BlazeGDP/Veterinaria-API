@@ -4,6 +4,7 @@ import {
   IsPositive,
   IsString,
   MaxLength,
+  Min,
 } from 'class-validator';
 
 export class UpdatePetDto {
@@ -24,7 +25,7 @@ export class UpdatePetDto {
 
   @IsOptional()
   @IsInt()
-  @IsPositive()
+  @Min(0)
   edad?: number;
 
   @IsOptional()

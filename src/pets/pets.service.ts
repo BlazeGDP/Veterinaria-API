@@ -7,6 +7,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { Pet } from './pet.entity';
+import { Owner } from '../owners/owner.entity';
+
 import { CreatePetDto } from './dto/create-pet.dto';
 import { UpdatePetDto } from './dto/update-pet.dto';
 
@@ -15,39 +17,57 @@ export class PetsService {
   constructor(
     @InjectRepository(Pet)
     private readonly petsRepository: Repository<Pet>,
+
+    @InjectRepository(Owner)
+    private readonly ownersRepository: Repository<Owner>,
   ) {}
 
   async create(createPetDto: CreatePetDto): Promise<Pet> {
+    const owner = await this.ownersRepository.findOne({
+      where: {
+        id: createPetDto.ownerId.toString(),
+      },
+    });
+
+    if (!owner) {
+      throw new NotFoundException(
+        `Dueño con ID ${createPetDto.ownerId} no encontrado`,
+      );
+    }
+
     const pet = this.petsRepository.create({
       nombre: createPetDto.nombre,
       especie: createPetDto.especie,
       raza: createPetDto.raza,
       edad: createPetDto.edad,
       ownerId: createPetDto.ownerId.toString(),
+      owner,
     });
 
-    return this.petsRepository.save(pet);
+    await this.petsRepository.save(pet);
+
+    return this.findOne(pet.id);
   }
 
   async findAll(
-  especie?: string,
-  ownerId?: string,
-): Promise<Pet[]> {
-  const where: any = {};
+    especie?: string,
+    ownerId?: string,
+  ): Promise<Pet[]> {
+    const where: any = {};
 
-  if (especie) {
-    where.especie = especie;
+    if (especie) {
+      where.especie = especie;
+    }
+
+    if (ownerId) {
+      where.ownerId = ownerId;
+    }
+
+    return this.petsRepository.find({
+      where,
+      relations: ['owner'],
+    });
   }
-
-  if (ownerId) {
-    where.ownerId = ownerId;
-  }
-
-  return this.petsRepository.find({
-    where,
-    relations: ['owner'],
-  });
-}
 
   async findOne(id: string): Promise<Pet> {
     const pet = await this.petsRepository.findOne({
@@ -76,10 +96,25 @@ export class PetsService {
     pet.edad = updatePetDto.edad ?? pet.edad;
 
     if (updatePetDto.ownerId !== undefined) {
+      const owner = await this.ownersRepository.findOne({
+        where: {
+          id: updatePetDto.ownerId.toString(),
+        },
+      });
+
+      if (!owner) {
+        throw new NotFoundException(
+          `Dueño con ID ${updatePetDto.ownerId} no encontrado`,
+        );
+      }
+
       pet.ownerId = updatePetDto.ownerId.toString();
+      pet.owner = owner;
     }
 
-    return this.petsRepository.save(pet);
+    await this.petsRepository.save(pet);
+
+    return this.findOne(id);
   }
 
   async remove(id: string): Promise<void> {

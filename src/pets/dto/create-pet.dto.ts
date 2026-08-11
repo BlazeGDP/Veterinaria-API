@@ -4,6 +4,7 @@ import {
   IsPositive,
   IsString,
   MaxLength,
+  Min,
 } from 'class-validator';
 
 export class CreatePetDto {
@@ -23,7 +24,7 @@ export class CreatePetDto {
   raza!: string;
 
   @IsInt()
-  @IsPositive()
+  @Min(0)
   edad!: number;
 
   @IsInt()
