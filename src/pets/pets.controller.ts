@@ -7,6 +7,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 
 import { PetsService } from './pets.service';
@@ -25,9 +26,12 @@ export class PetsController {
   }
 
   @Get()
-  findAll() {
-    return this.petsService.findAll();
-  }
+findAll(
+  @Query('especie') especie?: string,
+  @Query('ownerId') ownerId?: string,
+) {
+  return this.petsService.findAll(especie, ownerId);
+}
 
   @Get(':id')
   findOne(

@@ -29,11 +29,25 @@ export class PetsService {
     return this.petsRepository.save(pet);
   }
 
-  async findAll(): Promise<Pet[]> {
-    return this.petsRepository.find({
-      relations: ['owner'],
-    });
+  async findAll(
+  especie?: string,
+  ownerId?: string,
+): Promise<Pet[]> {
+  const where: any = {};
+
+  if (especie) {
+    where.especie = especie;
   }
+
+  if (ownerId) {
+    where.ownerId = ownerId;
+  }
+
+  return this.petsRepository.find({
+    where,
+    relations: ['owner'],
+  });
+}
 
   async findOne(id: string): Promise<Pet> {
     const pet = await this.petsRepository.findOne({

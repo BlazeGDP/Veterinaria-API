@@ -30,11 +30,25 @@ export class AppointmentsService {
     return this.appointmentsRepository.save(appointment);
   }
 
-  async findAll(): Promise<Appointment[]> {
+  async findAll(fecha?: string): Promise<Appointment[]> {
+  if (!fecha) {
     return this.appointmentsRepository.find({
       relations: ['pet'],
     });
   }
+
+  const inicio = new Date(`${fecha}T00:00:00`);
+  const fin = new Date(`${fecha}T00:00:00`);
+
+  fin.setDate(fin.getDate() + 1);
+
+  return this.appointmentsRepository
+    .createQueryBuilder('appointment')
+    .leftJoinAndSelect('appointment.pet', 'pet')
+    .where('appointment.fecha >= :inicio', { inicio })
+    .andWhere('appointment.fecha < :fin', { fin })
+    .getMany();
+}
 
   async findOne(id: string): Promise<Appointment> {
     const appointment = await this.appointmentsRepository.findOne({

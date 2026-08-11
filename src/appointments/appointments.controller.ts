@@ -7,6 +7,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 
 import { AppointmentsService } from './appointments.service';
@@ -29,9 +30,9 @@ export class AppointmentsController {
   }
 
   @Get()
-  findAll() {
-    return this.appointmentsService.findAll();
-  }
+findAll(@Query('fecha') fecha?: string) {
+  return this.appointmentsService.findAll(fecha);
+}
 
   @Get(':id')
   findOne(
