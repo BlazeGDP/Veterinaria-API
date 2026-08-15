@@ -8,17 +8,39 @@ import {
   Patch,
   Post,
   Query,
+  OnModuleInit,
 } from '@nestjs/common';
+
+import { HttpAdapterHost } from '@nestjs/core';
 
 import { AppointmentsService } from './appointments.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 
 @Controller('appointments')
-export class AppointmentsController {
+export class AppointmentsController implements OnModuleInit {
   constructor(
     private readonly appointmentsService: AppointmentsService,
+    private readonly httpAdapterHost: HttpAdapterHost,
   ) {}
+
+  onModuleInit() {
+    const fastify = this.httpAdapterHost.httpAdapter.getInstance();
+
+    fastify.route({
+      method: 'QUERY',
+      url: '/appointments',
+      handler: async (request: any) => {
+        const body = request.body as {
+          fecha?: string;
+        };
+
+        return this.appointmentsService.findAll(
+          body?.fecha,
+        );
+      },
+    });
+  }
 
   @Post()
   create(
@@ -30,9 +52,9 @@ export class AppointmentsController {
   }
 
   @Get()
-findAll(@Query('fecha') fecha?: string) {
-  return this.appointmentsService.findAll(fecha);
-}
+  findAll(@Query('fecha') fecha?: string) {
+    return this.appointmentsService.findAll(fecha);
+  }
 
   @Get(':id')
   findOne(
