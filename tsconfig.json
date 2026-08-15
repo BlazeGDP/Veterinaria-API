@@ -17,6 +17,7 @@
     "moduleResolution": "node",
     "resolveJsonModule": true,
     "esModuleInterop": true,
+    "types": ["node", "jest"],
     "paths": {
       "@app/*": ["src/*"]
     }
