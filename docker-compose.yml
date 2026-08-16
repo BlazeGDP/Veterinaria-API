@@ -5,15 +5,69 @@ services:
     restart: unless-stopped
 
     environment:
-      POSTGRES_DB: veterinaria
-      POSTGRES_USER: veterinaria_user
-      POSTGRES_PASSWORD: veterinaria_password
+      POSTGRES_DB: ${DATABASE_NAME}
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
 
     ports:
       - "5432:5432"
 
     volumes:
       - veterinaria_postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api-testing:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: veterinaria-api-testing
+    restart: unless-stopped
+
+    ports:
+      - "3000:3000"
+
+    environment:
+      PORT: 3000
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_USER: ${DATABASE_USER}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+      DATABASE_NAME: ${DATABASE_NAME}
+      DATABASE_SCHEMA: schema_testing
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api-production:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: veterinaria-api-production
+    restart: unless-stopped
+
+    ports:
+      - "3001:3000"
+
+    environment:
+      PORT: 3000
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_USER: ${DATABASE_USER}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+      DATABASE_NAME: ${DATABASE_NAME}
+      DATABASE_SCHEMA: schema_production
+
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   veterinaria_postgres_data:
