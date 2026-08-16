@@ -12,7 +12,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
-    "test:ci": "jest --coverage --runInBand",
+    "test:ci": "jest --coverage --runInBand --ci",
     "test:testing": "jest --config jest.config.testing.js --coverage --runInBand",
     "test:production": "jest --config jest.config.production.js --coverage --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json"
