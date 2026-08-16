@@ -8,7 +8,7 @@ on:
 
 jobs:
   production:
-    name: Build, Tests and Coverage
+    name: Build, Tests, Coverage and Docker
     runs-on: ubuntu-latest
 
     steps:
@@ -29,3 +29,6 @@ jobs:
 
       - name: Run production tests and coverage
         run: npm run test:production
+
+      - name: Build Docker image
+        run: docker build -t veterinaria-api-production .
