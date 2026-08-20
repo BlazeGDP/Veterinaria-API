@@ -34,3 +34,9 @@ jobs:
 
       - name: Build Docker image
         run: docker build -t veterinaria-api-testing .
+
+      - name: Deploy testing to Render
+        if: github.event_name == 'push' && env.RENDER_DEPLOY_HOOK != ''
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_TESTING_DEPLOY_HOOK }}
+        run: curl --fail --silent --show-error -X POST "$RENDER_DEPLOY_HOOK"

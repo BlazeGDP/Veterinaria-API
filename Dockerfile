@@ -22,6 +22,9 @@ RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
 
+COPY scripts ./scripts
+COPY src/database/schema.sql ./dist/database/schema.sql
+
 EXPOSE 3000
 
-CMD ["node", "dist/main.js"]
+CMD ["sh", "-c", "node scripts/init-database.js && node dist/main.js"]

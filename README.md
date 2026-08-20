@@ -59,6 +59,9 @@ DATABASE_SCHEMA=schema_testing
 
 Para Production se utiliza `schema_production`.
 
+En Render se utiliza `DATABASE_URL`, que Render genera automáticamente al
+conectar los servicios con la base PostgreSQL del archivo `render.yaml`.
+
 **No subir nunca los archivos `.env` reales al repositorio.**
 
 ## 4. Ejecutar con Docker
@@ -139,7 +142,58 @@ Ejemplo, si el proyecto contiene `schema.sql`:
 docker exec -i veterinaria-postgres psql -U veterinaria_user -d veterinaria < schema.sql
 ```
 
-## 6. Entidades y endpoints
+## 6. Deploy en Render
+
+El archivo `render.yaml` define una base PostgreSQL y dos servicios web:
+
+``` text
+veterinaria-api-testing     -> schema_testing
+veterinaria-api-production  -> schema_production
+```
+
+Configuración inicial:
+
+1. Subir estos cambios a GitHub.
+2. En Render seleccionar **New > Blueprint** y conectar el repositorio.
+3. Seleccionar el archivo `render.yaml` y aplicar el Blueprint.
+4. Esperar a que la base y ambos servicios terminen de desplegarse.
+5. Copiar la URL pública de cada Web Service desde Render.
+
+Al iniciar, cada servicio ejecuta `src/database/schema.sql` de forma
+idempotente y crea los dos esquemas y sus tablas. El servicio testing usa
+`schema_testing`; el servicio production usa `schema_production`.
+
+Las URLs tendrán este formato:
+
+``` text
+https://veterinaria-api-testing.onrender.com
+https://veterinaria-api-production.onrender.com
+```
+
+Las peticiones se hacen agregando el endpoint, por ejemplo:
+
+``` text
+GET https://veterinaria-api-testing.onrender.com/owners
+GET https://veterinaria-api-production.onrender.com/owners
+```
+
+Render asigna el puerto mediante `PORT`; la aplicación ya escucha en
+`0.0.0.0`, por lo que no se debe fijar otro puerto en el Blueprint.
+
+### Deploy desde GitHub Actions
+
+Render puede desplegar automáticamente con `autoDeploy: true`. Si se desea
+que el pipeline sea quien dispare el deploy después de pasar las pruebas:
+
+1. En cada Web Service abrir **Settings > Deploy Hook** y crear un hook.
+2. En GitHub abrir **Settings > Secrets and variables > Actions**.
+3. Crear `RENDER_TESTING_DEPLOY_HOOK` con el hook de testing.
+4. Crear `RENDER_PRODUCTION_DEPLOY_HOOK` con el hook de production.
+
+Los workflows solo llaman al hook en un push a `main` y después de build,
+coverage y Docker build exitosos.
+
+## 7. Entidades y endpoints
 
 ### Owners
 
@@ -171,7 +225,7 @@ PATCH  /appointments/:id
 DELETE /appointments/:id
 ```
 
-## 7. Consultas requeridas
+## 8. Consultas requeridas
 
 El proyecto implementa:
 
@@ -182,7 +236,7 @@ El proyecto implementa:
 Consultar los controladores/servicios del proyecto para los parámetros
 exactos de cada consulta.
 
-## 8. Método QUERY
+## 9. Método QUERY
 
 El proyecto registra el método HTTP `QUERY` mediante Fastify:
 
@@ -195,7 +249,7 @@ fastify.addHttpMethod('QUERY', {
 Esto permite cumplir el requisito académico de utilizar el verbo HTTP
 QUERY.
 
-## 9. Validación
+## 10. Validación
 
 La API utiliza `ValidationPipe` global con:
 
@@ -208,7 +262,7 @@ transform: true
 Los DTO validan los datos recibidos y rechazan propiedades no
 permitidas.
 
-## 10. Testing
+## 11. Testing
 
 Ejecutar todas las pruebas:
 
@@ -240,7 +294,7 @@ una conexión real a PostgreSQL.
 El proyecto cuenta con 67 pruebas unitarias que fueron ejecutadas
 exitosamente durante el desarrollo.
 
-## 11. Coverage y Quality Gates
+## 12. Coverage y Quality Gates
 
 Production utiliza un Quality Gate global del 85% para:
 
@@ -256,7 +310,7 @@ Durante la validación se comprobó el comportamiento aumentando
 temporalmente el requisito a 99%: el coverage real no alcanzó ese valor
 y el pipeline falló antes de construir la imagen Docker.
 
-## 12. GitHub Actions
+## 13. GitHub Actions
 
 Workflows:
 
@@ -284,7 +338,7 @@ Docker Build
 El Docker Build solamente se ejecuta si las etapas anteriores terminan
 correctamente.
 
-## 13. Docker
+## 14. Docker
 
 Construir manualmente la imagen:
 
@@ -297,7 +351,7 @@ aplicación y otra contiene la aplicación preparada para producción.
 
 Docker Compose ejecuta PostgreSQL y la API.
 
-## 14. Instalación completa desde cero
+## 15. Instalación completa desde cero
 
 ``` powershell
 git clone https://github.com/BlazeGDP/Veterinaria-API.git
@@ -321,7 +375,7 @@ GET http://localhost:3000/owners
 ejecutar primero el script SQL/schema del proyecto para crear esquemas y
 tablas, porque `synchronize` está desactivado.
 
-## 15. Ejecución sin Docker
+## 16. Ejecución sin Docker
 
 Instalar Node.js 24 y luego:
 
@@ -334,7 +388,7 @@ npm run start:dev
 La aplicación requiere PostgreSQL disponible y correctamente configurado
 en `.env`.
 
-## 16. Solución de problemas
+## 17. Solución de problemas
 
 Puerto 3000 ocupado:
 
@@ -372,7 +426,7 @@ Cuando la API está dentro de Docker, el host de PostgreSQL es
 Cuando la API se ejecuta directamente en Windows, normalmente se utiliza
 `localhost`.
 
-## 17. Comandos principales
+## 18. Comandos principales
 
 ``` powershell
 npm ci
@@ -390,11 +444,11 @@ docker compose logs -f api
 docker compose down
 ```
 
-## 18. Repositorio
+## 19. Repositorio
 
 https://github.com/BlazeGDP/Veterinaria-API
 
-## Estado
+## 20. Estado
 
 La implementación técnica, testing, Quality Gates, Docker y CI mediante
 GitHub Actions se encuentran completados. La etapa restante corresponde

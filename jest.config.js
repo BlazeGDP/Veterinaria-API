@@ -20,6 +20,7 @@ module.exports = {
   collectCoverageFrom: [
     'src/**/*.ts',
     '!src/main.ts',
+    '!src/config/**',
     '!src/**/*.module.ts',
     '!src/**/*.entity.ts',
     '!src/**/dto/**',

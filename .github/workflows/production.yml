@@ -32,3 +32,9 @@ jobs:
 
       - name: Build Docker image
         run: docker build -t veterinaria-api-production .
+
+      - name: Deploy production to Render
+        if: github.event_name == 'push' && env.RENDER_DEPLOY_HOOK != ''
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_PRODUCTION_DEPLOY_HOOK }}
+        run: curl --fail --silent --show-error -X POST "$RENDER_DEPLOY_HOOK"

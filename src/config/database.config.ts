@@ -10,15 +10,25 @@ export default registerAs(
   (): TypeOrmModuleOptions => ({
     type: 'postgres',
 
-    host: process.env.DATABASE_HOST || 'localhost',
+    ...(process.env.DATABASE_URL
+      ? {
+          url: process.env.DATABASE_URL,
+          ssl:
+            process.env.NODE_ENV === 'production'
+              ? { rejectUnauthorized: false }
+              : undefined,
+        }
+      : {
+          host: process.env.DATABASE_HOST || 'localhost',
 
-    port: Number(process.env.DATABASE_PORT || 5432),
+          port: Number(process.env.DATABASE_PORT || 5432),
 
-    username: process.env.DATABASE_USER,
+          username: process.env.DATABASE_USER,
 
-    password: process.env.DATABASE_PASSWORD,
+          password: process.env.DATABASE_PASSWORD,
 
-    database: process.env.DATABASE_NAME,
+          database: process.env.DATABASE_NAME,
+        }),
 
     schema: process.env.DATABASE_SCHEMA,
 

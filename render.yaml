@@ -1,0 +1,42 @@
+databases:
+  - name: veterinaria-db
+    databaseName: veterinaria
+    user: veterinaria_user
+    plan: free
+
+services:
+  - type: web
+    name: veterinaria-api-testing
+    runtime: docker
+    plan: free
+    branch: main
+    autoDeploy: true
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: veterinaria-db
+          property: connectionString
+      - key: DATABASE_SCHEMA
+        value: schema_testing
+
+  - type: web
+    name: veterinaria-api-production
+    runtime: docker
+    plan: free
+    branch: main
+    autoDeploy: true
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: veterinaria-db
+          property: connectionString
+      - key: DATABASE_SCHEMA
+        value: schema_production
