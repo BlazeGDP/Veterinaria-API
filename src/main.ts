@@ -14,6 +14,7 @@ async function bootstrap() {
 
   fastify.addHttpMethod('QUERY', {
     hasBody: true,
+    overrideExisting: true,
   });
 
   const app = await NestFactory.create<NestFastifyApplication>(
