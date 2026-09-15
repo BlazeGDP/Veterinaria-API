@@ -29,5 +29,10 @@ export default registerAs(
     logging: false,
 
     migrationsRun: false,
+
+    ssl: {
+  ca: require('fs').readFileSync('./global-bundle.pem').toString(),
+},
+
   }),
 );
