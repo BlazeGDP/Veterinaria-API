@@ -7,6 +7,7 @@ import databaseConfig from './config/database.config';
 import { OwnersModule } from './owners/owners.module';
 import { PetsModule } from './pets/pets.module';
 import { AppointmentsModule } from './appointments/appointments.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { AppointmentsModule } from './appointments/appointments.module';
     OwnersModule,
     PetsModule,
     AppointmentsModule,
+    HealthModule,
   ],
 })
 export class AppModule {}
