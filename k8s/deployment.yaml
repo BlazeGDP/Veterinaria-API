@@ -4,6 +4,7 @@ metadata:
   name: veterinaria-api
   labels:
     app: veterinaria-api
+
 spec:
   replicas: 2
 
