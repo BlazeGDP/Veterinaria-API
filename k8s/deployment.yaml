@@ -24,6 +24,8 @@ spec:
         app: veterinaria-api
 
     spec:
+      serviceAccountName: veterinaria-api-sqs
+
       containers:
         - name: veterinaria-api
 
