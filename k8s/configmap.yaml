@@ -7,3 +7,6 @@ data:
   DATABASE_PORT: "5432"
   DATABASE_NAME: "veterinaria"
   DATABASE_SCHEMA: "schema_production"
+
+  AWS_REGION: "us-east-2"
+  SQS_QUEUE_URL: "https://sqs.us-east-2.amazonaws.com/634197800511/veterinaria-api-queue"
