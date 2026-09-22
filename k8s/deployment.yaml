@@ -29,7 +29,7 @@ spec:
       containers:
         - name: veterinaria-api
 
-          image: 634197800511.dkr.ecr.us-east-2.amazonaws.com/veterinaria-api:v2
+          image: 634197800511.dkr.ecr.us-east-2.amazonaws.com/veterinaria-api:v2-sqs
 
           imagePullPolicy: IfNotPresent
 
