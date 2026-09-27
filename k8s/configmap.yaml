@@ -10,3 +10,6 @@ data:
 
   AWS_REGION: "us-east-2"
   SQS_QUEUE_URL: "https://sqs.us-east-2.amazonaws.com/634197800511/veterinaria-api-queue"
+
+  GCP_JUEGOS_URL: "http://34.10.12.227/juegos"
+  AZURE_TAREAS_URL: "http://57.169.3.252/tareas"
