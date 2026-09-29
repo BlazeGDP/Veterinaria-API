@@ -10,6 +10,7 @@ import { AppointmentsModule } from './appointments/appointments.module';
 import { HealthModule } from './health/health.module';
 import { SqsModule } from './sqs/sqs.module';
 import { ExternalModule } from './external/external.module';
+import { MetricsModule } from './metrics/metrics.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { ExternalModule } from './external/external.module';
     HealthModule,
     SqsModule,
     ExternalModule,
+    MetricsModule,
   ],
 })
 export class AppModule {}
