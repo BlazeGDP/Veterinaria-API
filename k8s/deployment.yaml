@@ -4,55 +4,41 @@ metadata:
   name: veterinaria-api
   labels:
     app: veterinaria-api
-
 spec:
   replicas: 2
-
   selector:
     matchLabels:
       app: veterinaria-api
-
   strategy:
     type: RollingUpdate
     rollingUpdate:
       maxUnavailable: 1
       maxSurge: 1
-
   template:
     metadata:
       labels:
         app: veterinaria-api
-
     spec:
       serviceAccountName: veterinaria-api-sqs
-
       containers:
         - name: veterinaria-api
-
-          image: 634197800511.dkr.ecr.us-east-2.amazonaws.com/veterinaria-api:v2-metrics
-
+          image: 634197800511.dkr.ecr.us-east-2.amazonaws.com/veterinaria-api:v3
           imagePullPolicy: IfNotPresent
-
           ports:
             - containerPort: 3000
               protocol: TCP
-
           envFrom:
             - configMapRef:
                 name: veterinaria-api-config
-
             - secretRef:
                 name: veterinaria-api-secret
-
           resources:
             requests:
               cpu: "100m"
               memory: "256Mi"
-
             limits:
               cpu: "500m"
               memory: "512Mi"
-
           livenessProbe:
             httpGet:
               path: /health
@@ -61,7 +47,6 @@ spec:
             periodSeconds: 20
             timeoutSeconds: 5
             failureThreshold: 3
-
           readinessProbe:
             httpGet:
               path: /health
@@ -70,7 +55,6 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
-
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:

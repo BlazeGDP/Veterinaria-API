@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import { ExternalModule } from '../external/external.module';
 import { Appointment } from './appointment.entity';
 import { Pet } from '../pets/pet.entity';
 
@@ -13,6 +14,7 @@ import { AppointmentsController } from './appointments.controller';
       Appointment,
       Pet,
     ]),
+    ExternalModule,
   ],
 
   controllers: [

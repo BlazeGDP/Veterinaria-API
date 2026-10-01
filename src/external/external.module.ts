@@ -1,9 +1,10 @@
 import { Module } from '@nestjs/common';
-import { ExternalController } from './external.controller';
+
+import { MetricsModule } from '../metrics/metrics.module';
 import { ExternalApiService } from './external-api.service';
 
 @Module({
-  controllers: [ExternalController],
+  imports: [MetricsModule],
   providers: [ExternalApiService],
   exports: [ExternalApiService],
 })

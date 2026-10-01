@@ -9,13 +9,19 @@ import {
   Post,
   Query,
   OnModuleInit,
+  Req,
 } from '@nestjs/common';
 
 import { HttpAdapterHost } from '@nestjs/core';
+import { FastifyRequest } from 'fastify';
 
 import { AppointmentsService } from './appointments.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
+
+type TraceRequest = FastifyRequest & {
+  traceId: string;
+};
 
 @Controller('appointments')
 export class AppointmentsController implements OnModuleInit {
@@ -25,18 +31,22 @@ export class AppointmentsController implements OnModuleInit {
   ) {}
 
   onModuleInit() {
-    const fastify = this.httpAdapterHost.httpAdapter.getInstance();
+    const fastify =
+      this.httpAdapterHost.httpAdapter.getInstance();
 
     fastify.route({
       method: 'QUERY',
       url: '/appointments',
-      handler: async (request: any) => {
-        const body = request.body as {
-          fecha?: string;
-        };
-
+      handler: async (
+        request: TraceRequest & {
+          body?: {
+            fecha?: string;
+          };
+        },
+      ) => {
         return this.appointmentsService.findAll(
-          body?.fecha,
+          request.body?.fecha,
+          request.traceId,
         );
       },
     });
@@ -52,16 +62,24 @@ export class AppointmentsController implements OnModuleInit {
   }
 
   @Get()
-  findAll(@Query('fecha') fecha?: string) {
-    return this.appointmentsService.findAll(fecha);
+  findAll(
+    @Query('fecha') fecha: string | undefined,
+    @Req() request: TraceRequest,
+  ) {
+    return this.appointmentsService.findAll(
+      fecha,
+      request.traceId,
+    );
   }
 
   @Get(':id')
   findOne(
     @Param('id', ParseIntPipe) id: number,
+    @Req() request: TraceRequest,
   ) {
     return this.appointmentsService.findOne(
       id.toString(),
+      request.traceId,
     );
   }
 

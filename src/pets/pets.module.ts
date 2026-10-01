@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import { ExternalModule } from '../external/external.module';
 import { Pet } from './pet.entity';
 import { Owner } from '../owners/owner.entity';
 
@@ -13,6 +14,7 @@ import { PetsService } from './pets.service';
       Pet,
       Owner,
     ]),
+    ExternalModule,
   ],
 
   controllers: [PetsController],

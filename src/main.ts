@@ -2,6 +2,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { MetricsInterceptor } from './metrics/metrics.interceptor';
 import { MetricsService } from './metrics/metrics.service';
+import { TraceInterceptor } from './trace/trace.interceptor';
 import {
   FastifyAdapter,
   NestFastifyApplication,
@@ -19,14 +20,17 @@ async function bootstrap() {
     overrideExisting: true,
   });
 
-  const app = await NestFactory.create<NestFastifyApplication>(
-    AppModule,
-    fastifyAdapter,
-  );
+  const app =
+    await NestFactory.create<NestFastifyApplication>(
+      AppModule,
+      fastifyAdapter,
+    );
 
-  const metricsService = app.get(MetricsService);
+  const metricsService =
+    app.get(MetricsService);
 
   app.useGlobalInterceptors(
+    new TraceInterceptor(),
     new MetricsInterceptor(metricsService),
   );
 
@@ -38,9 +42,13 @@ async function bootstrap() {
     }),
   );
 
-  const port = Number(process.env.PORT) || 3000;
+  const port =
+    Number(process.env.PORT) || 3000;
 
-  await app.listen(port, '0.0.0.0');
+  await app.listen(
+    port,
+    '0.0.0.0',
+  );
 }
 
 bootstrap();

@@ -1,82 +1,149 @@
 import {
-  HttpException,
-  HttpStatus,
   Injectable,
   Logger,
 } from '@nestjs/common';
 
+import { MetricsService } from '../metrics/metrics.service';
+
 @Injectable()
 export class ExternalApiService {
-  private readonly logger = new Logger(ExternalApiService.name);
+  private readonly logger = new Logger(
+    ExternalApiService.name,
+  );
 
   private readonly gcpJuegosUrl =
-    process.env.GCP_JUEGOS_URL || 'http://34.10.12.227/juegos';
+    process.env.GCP_JUEGOS_URL ||
+    'http://34.10.12.227/juegos';
 
   private readonly azureTareasUrl =
-    process.env.AZURE_TAREAS_URL || 'http://57.169.3.252/tareas';
+    process.env.AZURE_TAREAS_URL ||
+    'http://57.169.3.252/tareas';
 
-  async getJuegos(): Promise<unknown> {
-    return this.getFromExternalApi(this.gcpJuegosUrl);
+  constructor(
+    private readonly metrics: MetricsService,
+  ) {}
+
+  async appendRandomExternalEntities<T>(
+    items: T[],
+    traceId: string,
+  ): Promise<unknown[]> {
+    const [juego, tarea] = await Promise.all([
+      this.getRandomJuego(traceId),
+      this.getRandomTarea(traceId),
+    ]);
+
+    return [
+      ...items,
+      ...(juego !== null ? [juego] : []),
+      ...(tarea !== null ? [tarea] : []),
+    ];
   }
 
-  async getJuegoById(id: string): Promise<unknown> {
-    return this.getFromExternalApi(
-      `${this.gcpJuegosUrl}/${encodeURIComponent(id)}`,
+  async getRandomJuego(
+    traceId: string,
+  ): Promise<unknown | null> {
+    const juegos = await this.getList(
+      this.gcpJuegosUrl,
+      'gcp',
+      traceId,
     );
+
+    if (juegos.length === 0) {
+      return null;
+    }
+
+    return juegos[
+      Math.floor(Math.random() * juegos.length)
+    ];
   }
 
-  async getTareas(): Promise<unknown> {
-    return this.getFromExternalApi(this.azureTareasUrl);
-  }
-
-  async getTareaById(id: string): Promise<unknown> {
-    return this.getFromExternalApi(
-      `${this.azureTareasUrl}/${encodeURIComponent(id)}`,
+  async getRandomTarea(
+    traceId: string,
+  ): Promise<unknown | null> {
+    const tareas = await this.getList(
+      this.azureTareasUrl,
+      'azure',
+      traceId,
     );
+
+    if (tareas.length === 0) {
+      return null;
+    }
+
+    return tareas[
+      Math.floor(Math.random() * tareas.length)
+    ];
   }
 
-  private async getFromExternalApi(url: string): Promise<unknown> {
+  private async getList(
+    url: string,
+    service: 'gcp' | 'azure',
+    traceId: string,
+  ): Promise<unknown[]> {
+    const start = process.hrtime.bigint();
+    let metricStatus = 'error';
+
     try {
-      this.logger.log(`Consultando API externa: ${url}`);
+      this.logger.log(
+        `[TRACE ${traceId}] Consultando ${service}: ${url}`,
+      );
 
       const response = await fetch(url, {
         method: 'GET',
+        headers: {
+          'X-Trace-ID': traceId,
+        },
         signal: AbortSignal.timeout(10000),
       });
 
+      metricStatus = response.status.toString();
+
       if (!response.ok) {
         this.logger.error(
-          `API externa respondió ${response.status}: ${url}`,
+          `[TRACE ${traceId}] ${service} respondió ${response.status}: ${url}`,
         );
 
-        throw new HttpException(
-          {
-            statusCode: response.status,
-            message: `La API externa respondió con estado ${response.status}`,
-          },
-          response.status,
-        );
+        return [];
       }
 
-      return await response.json();
+      const data: unknown = await response.json();
+
+      if (!Array.isArray(data)) {
+        this.logger.error(
+          `[TRACE ${traceId}] ${service} no devolvió una lista en ${url}`,
+        );
+
+        metricStatus = 'invalid_response';
+        return [];
+      }
+
+      this.logger.log(
+        `[TRACE ${traceId}] ${service} respondió correctamente con ${data.length} registros`,
+      );
+
+      return data;
     } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-
       this.logger.error(
-        `Error consultando API externa: ${
-          error instanceof Error ? error.message : error
+        `[TRACE ${traceId}] Error consultando ${service}: ${
+          error instanceof Error
+            ? error.message
+            : 'error desconocido'
         }`,
       );
 
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.BAD_GATEWAY,
-          message: 'No fue posible comunicarse con la API externa',
-        },
-        HttpStatus.BAD_GATEWAY,
-      );
+      return [];
+    } finally {
+      const duration =
+        Number(process.hrtime.bigint() - start) /
+        1_000_000_000;
+
+      this.metrics.externalRequestDuration
+        .labels(service)
+        .observe(duration);
+
+      this.metrics.externalRequestsTotal
+        .labels(service, metricStatus)
+        .inc();
     }
   }
 }
