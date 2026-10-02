@@ -22,7 +22,7 @@ spec:
       serviceAccountName: veterinaria-api-sqs
       containers:
         - name: veterinaria-api
-          image: 634197800511.dkr.ecr.us-east-2.amazonaws.com/veterinaria-api:v3
+          image: 634197800511.dkr.ecr.us-east-2.amazonaws.com/veterinaria-api:v3.1
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000

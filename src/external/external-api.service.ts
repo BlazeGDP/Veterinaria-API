@@ -13,7 +13,7 @@ export class ExternalApiService {
 
   private readonly gcpJuegosUrl =
     process.env.GCP_JUEGOS_URL ||
-    'http://34.10.12.227/juegos';
+    'http://34.10.12.227/juegos/raw';
 
   private readonly azureTareasUrl =
     process.env.AZURE_TAREAS_URL ||
