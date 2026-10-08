@@ -1,6 +1,6 @@
 resource "aws_security_group" "alb" {
   name        = "${var.project_name}-alb-sg"
-  description = "Security group for Application Load Balancer"
+  description = "Security group for the public Application Load Balancer"
   vpc_id      = aws_vpc.main.id
 
   ingress {
@@ -12,7 +12,7 @@ resource "aws_security_group" "alb" {
   }
 
   egress {
-    description = "Allow all outbound traffic"
+    description = "All outbound traffic"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -30,7 +30,7 @@ resource "aws_security_group" "ecs" {
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description     = "API traffic from ALB"
+    description     = "API traffic from the ALB"
     from_port       = var.container_port
     to_port         = var.container_port
     protocol        = "tcp"
@@ -38,7 +38,7 @@ resource "aws_security_group" "ecs" {
   }
 
   egress {
-    description = "Allow all outbound traffic"
+    description = "All outbound traffic"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -52,11 +52,11 @@ resource "aws_security_group" "ecs" {
 
 resource "aws_security_group" "rds" {
   name        = "${var.project_name}-rds-sg"
-  description = "Security group for PostgreSQL RDS"
+  description = "Security group for private PostgreSQL RDS"
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description     = "PostgreSQL from ECS"
+    description     = "PostgreSQL only from ECS"
     from_port       = 5432
     to_port         = 5432
     protocol        = "tcp"
@@ -64,7 +64,7 @@ resource "aws_security_group" "rds" {
   }
 
   egress {
-    description = "Allow all outbound traffic"
+    description = "All outbound traffic"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
