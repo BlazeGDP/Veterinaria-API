@@ -1,26 +1,23 @@
 node_modules/
 dist/
+coverage/
 .env
-.env.production
-.env.testing
-.env.production.*
-.env.testing.*
 .env.*
 !.env.example
-coverage/
+*.log
 global-bundle.pem
+
+# Terraform
 .terraform/
 *.tfstate
 *.tfstate.*
 crash.log
 crash.*.log
-
 *.tfvars
 !terraform.tfvars.example
 
+# Terraform overrides
 override.tf
 override.tf.json
 *_override.tf
 *_override.tf.json
-
-.terraform.lock.hcl

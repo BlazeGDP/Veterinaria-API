@@ -1,8 +1,5 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { MetricsInterceptor } from './metrics/metrics.interceptor';
-import { MetricsService } from './metrics/metrics.service';
-import { TraceInterceptor } from './trace/trace.interceptor';
 import {
   FastifyAdapter,
   NestFastifyApplication,
@@ -25,14 +22,6 @@ async function bootstrap() {
       AppModule,
       fastifyAdapter,
     );
-
-  const metricsService =
-    app.get(MetricsService);
-
-  app.useGlobalInterceptors(
-    new TraceInterceptor(),
-    new MetricsInterceptor(metricsService),
-  );
 
   app.useGlobalPipes(
     new ValidationPipe({

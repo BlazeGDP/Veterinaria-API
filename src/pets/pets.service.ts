@@ -1,15 +1,9 @@
-import {
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
-
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { ExternalApiService } from '../external/external-api.service';
 import { Pet } from './pet.entity';
 import { Owner } from '../owners/owner.entity';
-
 import { CreatePetDto } from './dto/create-pet.dto';
 import { UpdatePetDto } from './dto/update-pet.dto';
 
@@ -18,18 +12,13 @@ export class PetsService {
   constructor(
     @InjectRepository(Pet)
     private readonly petsRepository: Repository<Pet>,
-
     @InjectRepository(Owner)
     private readonly ownersRepository: Repository<Owner>,
-
-    private readonly externalApiService: ExternalApiService,
   ) {}
 
   async create(createPetDto: CreatePetDto): Promise<Pet> {
     const owner = await this.ownersRepository.findOne({
-      where: {
-        id: createPetDto.ownerId.toString(),
-      },
+      where: { id: createPetDto.ownerId.toString() },
     });
 
     if (!owner) {
@@ -48,43 +37,36 @@ export class PetsService {
     });
 
     await this.petsRepository.save(pet);
-
-    return this.findOneEntity(pet.id);
+    return this.findOne(pet.id);
   }
 
-  async findAll(
-    especie: string | undefined,
-    ownerId: string | undefined,
-    traceId: string,
-  ): Promise<unknown[]> {
-    const pets = await this.findAllEntities(
-      especie,
-      ownerId,
-    );
+  async findAll(especie?: string, ownerId?: string): Promise<Pet[]> {
+    const where: Record<string, string> = {};
 
-    return this.externalApiService.appendRandomExternalEntities(
-      pets,
-      traceId,
-    );
+    if (especie) where.especie = especie;
+    if (ownerId) where.ownerId = ownerId;
+
+    return this.petsRepository.find({
+      where,
+      relations: ['owner'],
+    });
   }
 
-  async findOne(
-    id: string,
-    traceId: string,
-  ): Promise<unknown[]> {
-    const pet = await this.findOneEntity(id);
+  async findOne(id: string): Promise<Pet> {
+    const pet = await this.petsRepository.findOne({
+      where: { id },
+      relations: ['owner'],
+    });
 
-    return this.externalApiService.appendRandomExternalEntities(
-      [pet],
-      traceId,
-    );
+    if (!pet) {
+      throw new NotFoundException(`Mascota con ID ${id} no encontrada`);
+    }
+
+    return pet;
   }
 
-  async update(
-    id: string,
-    updatePetDto: UpdatePetDto,
-  ): Promise<Pet> {
-    const pet = await this.findOneEntity(id);
+  async update(id: string, updatePetDto: UpdatePetDto): Promise<Pet> {
+    const pet = await this.findOne(id);
 
     pet.nombre = updatePetDto.nombre ?? pet.nombre;
     pet.especie = updatePetDto.especie ?? pet.especie;
@@ -93,9 +75,7 @@ export class PetsService {
 
     if (updatePetDto.ownerId !== undefined) {
       const owner = await this.ownersRepository.findOne({
-        where: {
-          id: updatePetDto.ownerId.toString(),
-        },
+        where: { id: updatePetDto.ownerId.toString() },
       });
 
       if (!owner) {
@@ -109,48 +89,11 @@ export class PetsService {
     }
 
     await this.petsRepository.save(pet);
-
-    return this.findOneEntity(id);
+    return this.findOne(id);
   }
 
   async remove(id: string): Promise<void> {
-    const pet = await this.findOneEntity(id);
-
+    const pet = await this.findOne(id);
     await this.petsRepository.remove(pet);
-  }
-
-  private async findAllEntities(
-    especie?: string,
-    ownerId?: string,
-  ): Promise<Pet[]> {
-    const where: any = {};
-
-    if (especie) {
-      where.especie = especie;
-    }
-
-    if (ownerId) {
-      where.ownerId = ownerId;
-    }
-
-    return this.petsRepository.find({
-      where,
-      relations: ['owner'],
-    });
-  }
-
-  private async findOneEntity(id: string): Promise<Pet> {
-    const pet = await this.petsRepository.findOne({
-      where: { id },
-      relations: ['owner'],
-    });
-
-    if (!pet) {
-      throw new NotFoundException(
-        `Mascota con ID ${id} no encontrada`,
-      );
-    }
-
-    return pet;
   }
 }

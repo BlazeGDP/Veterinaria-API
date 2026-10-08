@@ -3,14 +3,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { ExternalApiService } from '../external/external-api.service';
 import { Appointment } from './appointment.entity';
 import { Pet } from '../pets/pet.entity';
-
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 
@@ -19,20 +16,15 @@ export class AppointmentsService {
   constructor(
     @InjectRepository(Appointment)
     private readonly appointmentsRepository: Repository<Appointment>,
-
     @InjectRepository(Pet)
     private readonly petsRepository: Repository<Pet>,
-
-    private readonly externalApiService: ExternalApiService,
   ) {}
 
   async create(
     createAppointmentDto: CreateAppointmentDto,
   ): Promise<Appointment> {
     const pet = await this.petsRepository.findOne({
-      where: {
-        id: createAppointmentDto.petId.toString(),
-      },
+      where: { id: createAppointmentDto.petId.toString() },
     });
 
     if (!pet) {
@@ -41,56 +33,35 @@ export class AppointmentsService {
       );
     }
 
-    const appointment =
-      this.appointmentsRepository.create({
-        fecha: new Date(createAppointmentDto.fecha),
-        motivo: createAppointmentDto.motivo,
-        estado: createAppointmentDto.estado,
-        petId: createAppointmentDto.petId.toString(),
-        pet,
-      });
+    const appointment = this.appointmentsRepository.create({
+      fecha: new Date(createAppointmentDto.fecha),
+      motivo: createAppointmentDto.motivo,
+      estado: createAppointmentDto.estado,
+      petId: createAppointmentDto.petId.toString(),
+      pet,
+    });
 
     await this.appointmentsRepository.save(appointment);
-
-    return this.findOneEntity(appointment.id);
+    return this.findOne(appointment.id);
   }
 
-  async findAll(
-    fecha: string | undefined,
-    traceId: string,
-  ): Promise<unknown[]> {
-    const appointments =
-      await this.findAllEntities(fecha);
-
-    return this.externalApiService.appendRandomExternalEntities(
-      appointments,
-      traceId,
-    );
+  async findAll(fecha?: string): Promise<Appointment[]> {
+    return this.findAllEntities(fecha);
   }
 
-  async findOne(
-    id: string,
-    traceId: string,
-  ): Promise<unknown[]> {
-    const appointment = await this.findOneEntity(id);
-
-    return this.externalApiService.appendRandomExternalEntities(
-      [appointment],
-      traceId,
-    );
+  async findOne(id: string): Promise<Appointment> {
+    return this.findOneEntity(id);
   }
 
   async update(
     id: string,
     updateAppointmentDto: UpdateAppointmentDto,
   ): Promise<Appointment> {
-    const appointment =
-      await this.findOneEntity(id);
+    const appointment = await this.findOneEntity(id);
 
-    appointment.fecha =
-      updateAppointmentDto.fecha !== undefined
-        ? new Date(updateAppointmentDto.fecha)
-        : appointment.fecha;
+    if (updateAppointmentDto.fecha !== undefined) {
+      appointment.fecha = new Date(updateAppointmentDto.fecha);
+    }
 
     appointment.motivo =
       updateAppointmentDto.motivo ?? appointment.motivo;
@@ -100,16 +71,12 @@ export class AppointmentsService {
         appointment.estado,
         updateAppointmentDto.estado,
       );
-
-      appointment.estado =
-        updateAppointmentDto.estado;
+      appointment.estado = updateAppointmentDto.estado;
     }
 
     if (updateAppointmentDto.petId !== undefined) {
       const pet = await this.petsRepository.findOne({
-        where: {
-          id: updateAppointmentDto.petId.toString(),
-        },
+        where: { id: updateAppointmentDto.petId.toString() },
       });
 
       if (!pet) {
@@ -118,67 +85,44 @@ export class AppointmentsService {
         );
       }
 
-      appointment.petId =
-        updateAppointmentDto.petId.toString();
-
+      appointment.petId = updateAppointmentDto.petId.toString();
       appointment.pet = pet;
     }
 
-    await this.appointmentsRepository.save(
-      appointment,
-    );
-
-    return this.findOneEntity(id);
+    await this.appointmentsRepository.save(appointment);
+    return this.findOne(id);
   }
 
   async remove(id: string): Promise<void> {
-    const appointment =
-      await this.findOneEntity(id);
-
-    await this.appointmentsRepository.remove(
-      appointment,
-    );
+    const appointment = await this.findOneEntity(id);
+    await this.appointmentsRepository.remove(appointment);
   }
 
-  private async findAllEntities(
-    fecha?: string,
-  ): Promise<Appointment[]> {
+  private async findAllEntities(fecha?: string): Promise<Appointment[]> {
     if (!fecha) {
-      return this.appointmentsRepository.find({
-        relations: ['pet'],
-      });
+      return this.appointmentsRepository.find({ relations: ['pet'] });
     }
 
     const inicio = new Date(`${fecha}T00:00:00`);
     const fin = new Date(`${fecha}T00:00:00`);
-
     fin.setDate(fin.getDate() + 1);
 
     return this.appointmentsRepository
       .createQueryBuilder('appointment')
       .leftJoinAndSelect('appointment.pet', 'pet')
-      .where('appointment.fecha >= :inicio', {
-        inicio,
-      })
-      .andWhere('appointment.fecha < :fin', {
-        fin,
-      })
+      .where('appointment.fecha >= :inicio', { inicio })
+      .andWhere('appointment.fecha < :fin', { fin })
       .getMany();
   }
 
-  private async findOneEntity(
-    id: string,
-  ): Promise<Appointment> {
-    const appointment =
-      await this.appointmentsRepository.findOne({
-        where: { id },
-        relations: ['pet'],
-      });
+  private async findOneEntity(id: string): Promise<Appointment> {
+    const appointment = await this.appointmentsRepository.findOne({
+      where: { id },
+      relations: ['pet'],
+    });
 
     if (!appointment) {
-      throw new NotFoundException(
-        `Cita con ID ${id} no encontrada`,
-      );
+      throw new NotFoundException(`Cita con ID ${id} no encontrada`);
     }
 
     return appointment;
@@ -188,19 +132,13 @@ export class AppointmentsService {
     currentStatus: string,
     newStatus: string,
   ): void {
-    if (
-      currentStatus === 'completed' &&
-      newStatus !== 'completed'
-    ) {
+    if (currentStatus === 'completed' && newStatus !== 'completed') {
       throw new ConflictException(
         'Una cita completada no puede cambiar a otro estado',
       );
     }
 
-    if (
-      currentStatus === 'cancelled' &&
-      newStatus !== 'cancelled'
-    ) {
+    if (currentStatus === 'cancelled' && newStatus !== 'cancelled') {
       throw new ConflictException(
         'Una cita cancelada no puede cambiar a otro estado',
       );

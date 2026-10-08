@@ -3,14 +3,10 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import databaseConfig from './config/database.config';
-
 import { OwnersModule } from './owners/owners.module';
 import { PetsModule } from './pets/pets.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { HealthModule } from './health/health.module';
-import { SqsModule } from './sqs/sqs.module';
-import { ExternalModule } from './external/external.module';
-import { MetricsModule } from './metrics/metrics.module';
 
 @Module({
   imports: [
@@ -18,22 +14,16 @@ import { MetricsModule } from './metrics/metrics.module';
       isGlobal: true,
       load: [databaseConfig],
     }),
-
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-
       useFactory: (configService: ConfigService) =>
         configService.getOrThrow('database'),
     }),
-
     OwnersModule,
     PetsModule,
     AppointmentsModule,
     HealthModule,
-    SqsModule,
-    ExternalModule,
-    MetricsModule,
   ],
 })
 export class AppModule {}

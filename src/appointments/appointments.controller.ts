@@ -8,86 +8,41 @@ import {
   Patch,
   Post,
   Query,
-  OnModuleInit,
-  Req,
 } from '@nestjs/common';
-
-import { HttpAdapterHost } from '@nestjs/core';
-import { FastifyRequest } from 'fastify';
 
 import { AppointmentsService } from './appointments.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
-
-type TraceRequest = FastifyRequest & {
-  traceId: string;
-};
+import { Appointment } from './appointment.entity';
 
 @Controller('appointments')
-export class AppointmentsController implements OnModuleInit {
-  constructor(
-    private readonly appointmentsService: AppointmentsService,
-    private readonly httpAdapterHost: HttpAdapterHost,
-  ) {}
-
-  onModuleInit() {
-    const fastify =
-      this.httpAdapterHost.httpAdapter.getInstance();
-
-    fastify.route({
-      method: 'QUERY',
-      url: '/appointments',
-      handler: async (
-        request: TraceRequest & {
-          body?: {
-            fecha?: string;
-          };
-        },
-      ) => {
-        return this.appointmentsService.findAll(
-          request.body?.fecha,
-          request.traceId,
-        );
-      },
-    });
-  }
+export class AppointmentsController {
+  constructor(private readonly appointmentsService: AppointmentsService) {}
 
   @Post()
   create(
     @Body() createAppointmentDto: CreateAppointmentDto,
-  ) {
-    return this.appointmentsService.create(
-      createAppointmentDto,
-    );
+  ): Promise<Appointment> {
+    return this.appointmentsService.create(createAppointmentDto);
   }
 
   @Get()
-  findAll(
-    @Query('fecha') fecha: string | undefined,
-    @Req() request: TraceRequest,
-  ) {
-    return this.appointmentsService.findAll(
-      fecha,
-      request.traceId,
-    );
+  findAll(@Query('fecha') fecha?: string): Promise<Appointment[]> {
+    return this.appointmentsService.findAll(fecha);
   }
 
   @Get(':id')
   findOne(
     @Param('id', ParseIntPipe) id: number,
-    @Req() request: TraceRequest,
-  ) {
-    return this.appointmentsService.findOne(
-      id.toString(),
-      request.traceId,
-    );
+  ): Promise<Appointment> {
+    return this.appointmentsService.findOne(id.toString());
   }
 
   @Patch(':id')
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateAppointmentDto: UpdateAppointmentDto,
-  ) {
+  ): Promise<Appointment> {
     return this.appointmentsService.update(
       id.toString(),
       updateAppointmentDto,
@@ -95,11 +50,7 @@ export class AppointmentsController implements OnModuleInit {
   }
 
   @Delete(':id')
-  remove(
-    @Param('id', ParseIntPipe) id: number,
-  ) {
-    return this.appointmentsService.remove(
-      id.toString(),
-    );
+  remove(@Param('id', ParseIntPipe) id: number): Promise<void> {
+    return this.appointmentsService.remove(id.toString());
   }
 }
