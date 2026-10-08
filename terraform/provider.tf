@@ -3,10 +3,12 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project     = "api-restful-veterinaria"
+      Project     = var.project_name
       Environment = var.environment
       Version     = "v3"
       ManagedBy   = "Terraform"
     }
   }
 }
+
+provider "random" {}
