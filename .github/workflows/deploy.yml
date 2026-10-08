@@ -1,0 +1,121 @@
+name: Deploy V3 to AWS
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: us-east-2
+  PROJECT_NAME: api-restful-veterinaria
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials with OIDC
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: github-actions-v3
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform init
+        working-directory: terraform
+        run: terraform init -input=false
+
+      - name: Terraform format check
+        run: terraform fmt -check -recursive
+
+      - name: Terraform validate
+        working-directory: terraform
+        run: terraform validate
+
+      - name: Create ECR repository first
+        working-directory: terraform
+        run: |
+          terraform apply -input=false -auto-approve \
+            -target=aws_ecr_repository.api \
+            -target=aws_ecr_lifecycle_policy.api
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $REGISTRY/${{ env.PROJECT_NAME }}-api:$IMAGE_TAG .
+          docker tag $REGISTRY/${{ env.PROJECT_NAME }}-api:$IMAGE_TAG $REGISTRY/${{ env.PROJECT_NAME }}-api:latest
+          docker push $REGISTRY/${{ env.PROJECT_NAME }}-api:$IMAGE_TAG
+          docker push $REGISTRY/${{ env.PROJECT_NAME }}-api:latest
+
+      - name: Terraform apply infrastructure and ECS deployment
+        working-directory: terraform
+        run: |
+          terraform apply -input=false -auto-approve \
+            -var="image_tag=${{ github.sha }}"
+
+      - name: Wait for ECS service
+        run: |
+          aws ecs wait services-stable \
+            --cluster ${{ env.PROJECT_NAME }}-cluster \
+            --services ${{ env.PROJECT_NAME }}-service
+
+      - name: Initialize PostgreSQL schema
+        working-directory: terraform
+        run: |
+          SUBNETS=$(terraform output -json private_subnet_ids | jq -r 'join(",")')
+          SECURITY_GROUP=$(terraform output -raw ecs_security_group_id)
+          TASK_DEFINITION=$(terraform output -raw ecs_task_definition_arn)
+          CLUSTER=$(terraform output -raw ecs_cluster_name)
+
+          TASK_ARN=$(aws ecs run-task \
+            --cluster "$CLUSTER" \
+            --launch-type FARGATE \
+            --task-definition "$TASK_DEFINITION" \
+            --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUP],assignPublicIp=DISABLED}" \
+            --overrides '{"containerOverrides":[{"name":"api","command":["node","scripts/init-database.js"]}]}' \
+            --query 'tasks[0].taskArn' \
+            --output text)
+
+          if [ -z "$TASK_ARN" ] || [ "$TASK_ARN" = "None" ]; then
+            echo "No se pudo iniciar la tarea de inicialización."
+            exit 1
+          fi
+
+          aws ecs wait tasks-stopped \
+            --cluster "$CLUSTER" \
+            --tasks "$TASK_ARN"
+
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster "$CLUSTER" \
+            --tasks "$TASK_ARN" \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "La inicialización de PostgreSQL falló con exit code $EXIT_CODE."
+            exit 1
+          fi
+
+      - name: Show deployment URL
+        working-directory: terraform
+        run: terraform output api_url
