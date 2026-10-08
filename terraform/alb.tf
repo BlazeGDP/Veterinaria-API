@@ -2,12 +2,8 @@ resource "aws_lb" "api" {
   name               = "${var.project_name}-alb"
   internal           = false
   load_balancer_type = "application"
-
-  security_groups = [
-    aws_security_group.alb.id
-  ]
-
-  subnets = aws_subnet.public[*].id
+  security_groups    = [aws_security_group.alb.id]
+  subnets            = aws_subnet.public[*].id
 
   tags = {
     Name = "${var.project_name}-alb"
@@ -19,8 +15,7 @@ resource "aws_lb_target_group" "api" {
   port        = var.container_port
   protocol    = "HTTP"
   target_type = "ip"
-
-  vpc_id = aws_vpc.main.id
+  vpc_id      = aws_vpc.main.id
 
   health_check {
     enabled             = true
@@ -45,12 +40,7 @@ resource "aws_lb_listener" "http" {
   protocol          = "HTTP"
 
   default_action {
-    type = "forward"
-
-    forward {
-      target_group {
-        arn = aws_lb_target_group.api.arn
-      }
-    }
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.api.arn
   }
 }
