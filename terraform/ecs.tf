@@ -90,18 +90,18 @@ resource "aws_ecs_task_definition" "api" {
 }
 
 resource "aws_ecs_service" "api" {
-  name            = "${var.project_name}-service"
-  cluster         = aws_ecs_cluster.api.id
-  task_definition = aws_ecs_task_definition.api.arn
-  desired_count   = var.ecs_desired_count
-  launch_type     = "FARGATE"
+  name             = "${var.project_name}-service"
+  cluster          = aws_ecs_cluster.api.id
+  task_definition  = aws_ecs_task_definition.api.arn
+  desired_count    = var.ecs_desired_count
+  launch_type      = "FARGATE"
   platform_version = "LATEST"
 
   health_check_grace_period_seconds = 60
 
   network_configuration {
-    subnets         = aws_subnet.private[*].id
-    security_groups = [aws_security_group.ecs.id]
+    subnets          = aws_subnet.private[*].id
+    security_groups  = [aws_security_group.ecs.id]
     assign_public_ip = false
   }
 
