@@ -8,4 +8,5 @@ coverage
 *.log
 terraform/.terraform
 terraform/*.tfstate
-terraform/*.tfstate.* 
+terraform/*.tfstate.*
+*.tsbuildinfo

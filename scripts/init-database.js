@@ -11,10 +11,13 @@ if (!schemaPath) {
   throw new Error('No se encontró src/database/schema.sql ni dist/database/schema.sql');
 }
 
+// RDS PostgreSQL 16 fuerza SSL por defecto: usamos la misma variable que la API.
+const sslEnabled = process.env.DATABASE_SSL === 'true';
+
 const connectionConfig = process.env.DATABASE_URL
   ? {
       connectionString: process.env.DATABASE_URL,
-      ssl: process.env.NODE_ENV === 'production'
+      ssl: sslEnabled || process.env.NODE_ENV === 'production'
         ? { rejectUnauthorized: false }
         : undefined,
     }
@@ -24,6 +27,7 @@ const connectionConfig = process.env.DATABASE_URL
       user: process.env.DATABASE_USER,
       password: process.env.DATABASE_PASSWORD,
       database: process.env.DATABASE_NAME,
+      ssl: sslEnabled ? { rejectUnauthorized: false } : undefined,
     };
 
 async function initializeDatabase() {
@@ -32,6 +36,7 @@ async function initializeDatabase() {
   await client.connect();
   await client.query(fs.readFileSync(schemaPath, 'utf8'));
   await client.end();
+  console.log('Esquema de base de datos inicializado correctamente.');
 }
 
 initializeDatabase().catch((error) => {

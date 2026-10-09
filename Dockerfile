@@ -17,7 +17,8 @@ COPY package*.json ./
 RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/src/database/schema.sql ./database/schema.sql
+# init-database.js busca el schema en <cwd>/src/database/schema.sql
+COPY --from=builder /app/src/database/schema.sql ./src/database/schema.sql
 COPY --from=builder /app/scripts/init-database.js ./scripts/init-database.js
 
 EXPOSE 3000
