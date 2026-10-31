@@ -34,7 +34,13 @@ def one_request(url: str, failure_mode: Optional[str], canary_token: Optional[st
         track = exc.headers.get("X-App-Track", "unknown")
         version = exc.headers.get("X-App-Version", "unknown")
     except Exception as exc:  # network errors are counted separately
-        return {"status": "network_error", "track": "unknown", "version": "unknown", "elapsed": time.perf_counter() - started, "error": str(exc)}
+        return {
+            "status": "network_error",
+            "track": "unknown",
+            "version": "unknown",
+            "elapsed": time.perf_counter() - started,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
 
     return {
         "status": str(status),
@@ -92,6 +98,7 @@ def main() -> int:
     tracks: collections.Counter[str] = collections.Counter()
     statuses: collections.Counter[str] = collections.Counter()
     versions: collections.Counter[str] = collections.Counter()
+    network_error_examples: collections.Counter[str] = collections.Counter()
     if args.duration_seconds is not None:
         deadline = started + args.duration_seconds
         with concurrent.futures.ThreadPoolExecutor(max_workers=args.concurrency) as executor:
@@ -111,6 +118,7 @@ def main() -> int:
                 tracks.update(worker_stats["tracks"])
                 versions.update(worker_stats["versions"])
                 statuses.update(worker_stats["statuses"])
+                network_error_examples.update(worker_stats["network_error_examples"])
         requested = sum(statuses.values())
     else:
         with concurrent.futures.ThreadPoolExecutor(max_workers=args.concurrency) as executor:
@@ -145,6 +153,7 @@ def main() -> int:
         "versions": dict(versions),
         "statuses": dict(statuses),
         "network_errors": network_errors,
+        "network_error_rate_percent": round(100 * network_errors / requested, 3) if requested else 0.0,
         "network_error_examples": [
             {"error": message, "count": count}
             for message, count in network_error_examples.most_common(5)
