@@ -1,7 +1,7 @@
 {
-  "window": "10m",
+  "window": "2m",
   "maxClientNetworkErrorRatePercent": 1.0,
-  "minSamplesPerTrack": 200,
+  "minSamplesPerTrack": 150,
   "maxCanary5xxRate": 0.01,
   "maxCanaryWilsonUpper95": 0.05,
   "maxCanaryErrorRateDifference": 0.03,

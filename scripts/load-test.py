@@ -14,8 +14,10 @@ import urllib.request
 from typing import Any, Optional
 
 
-def one_request(url: str, failure_mode: Optional[str], canary_token: Optional[str], timeout: float) -> dict[str, Any]:
+def one_request(url: str, failure_mode: Optional[str], canary_token: Optional[str], timeout: float, close_connection: bool = False) -> dict[str, Any]:
     headers = {"Accept": "application/json"}
+    if close_connection:
+        headers["Connection"] = "close"
     if failure_mode:
         headers["x-canary-failure"] = failure_mode
         if canary_token:
@@ -56,6 +58,7 @@ def duration_worker(
     canary_token: Optional[str],
     timeout: float,
     deadline: float,
+    close_connection: bool = False,
 ) -> dict[str, collections.Counter[str]]:
     stats = {
         "tracks": collections.Counter(),
@@ -64,7 +67,7 @@ def duration_worker(
         "network_error_examples": collections.Counter(),
     }
     while time.perf_counter() < deadline:
-        item = one_request(url, failure_mode, canary_token, timeout)
+        item = one_request(url, failure_mode, canary_token, timeout, close_connection)
         stats["tracks"][item["track"]] += 1
         stats["versions"][item["version"]] += 1
         stats["statuses"][str(item["status"])] += 1
@@ -85,6 +88,7 @@ def main() -> int:
     parser.add_argument("--timeout", type=float, default=15)
     parser.add_argument("--max-network-error-rate-percent", type=float, default=1.0, help="Máximo de errores de transporte tolerados antes de abortar (porcentaje)")
     parser.add_argument("--expect-canary-only", action="store_true")
+    parser.add_argument("--close-connection", action="store_true", help="Abre una conexión HTTP nueva por petición; útil para validar cambios de enrutamiento ALB")
     args = parser.parse_args()
 
     if args.requests < 1 or args.concurrency < 1:
@@ -113,6 +117,7 @@ def main() -> int:
                     args.canary_token,
                     args.timeout,
                     deadline,
+                    args.close_connection,
                 )
                 for _ in range(args.concurrency)
             ]
@@ -126,7 +131,7 @@ def main() -> int:
     else:
         with concurrent.futures.ThreadPoolExecutor(max_workers=args.concurrency) as executor:
             results = list(executor.map(
-                lambda _: one_request(target, args.failure, args.canary_token, args.timeout),
+                lambda _: one_request(target, args.failure, args.canary_token, args.timeout, args.close_connection),
                 range(args.requests),
             ))
         tracks.update(item["track"] for item in results)
@@ -179,8 +184,12 @@ def main() -> int:
         )
     if args.expect_canary_only:
         recognized = tracks.get("stable", 0) + tracks.get("canary", 0)
-        if recognized == 0 or tracks.get("canary", 0) != recognized:
-            print("ERROR: se esperaban todas las respuestas clasificadas desde Canary.")
+        unknown = tracks.get("unknown", 0)
+        if recognized == 0 or tracks.get("canary", 0) != recognized or unknown > 0:
+            print(
+                "ERROR: se esperaban todas las respuestas clasificadas desde Canary; "
+                f"canary={tracks.get('canary', 0)}, stable={tracks.get('stable', 0)}, unknown={unknown}."
+            )
             return 1
     return 0
 

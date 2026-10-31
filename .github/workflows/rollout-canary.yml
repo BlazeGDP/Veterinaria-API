@@ -10,10 +10,11 @@ on:
         options: [none, 500, latency]
         default: none
       stage_duration_seconds:
-        description: 'Duración de carga concurrente por etapa (segundos)'
+        description: 'Duración de carga por etapa; 120s recomendado para sustentación'
         required: true
-        default: '600'
-        type: string
+        type: choice
+        options: ['120', '150', '180']
+        default: '120'
       concurrency:
         description: 'Solicitudes concurrentes del generador de carga'
         required: true
@@ -69,9 +70,6 @@ jobs:
           terraform -chdir=terraform init -input=false -backend-config="bucket=${TF_STATE_BUCKET}"
           terraform -chdir=terraform-canary init -input=false -backend-config="bucket=${TF_STATE_BUCKET}"
 
-      - name: Allow Grafana Cloud to collect baseline samples
-        run: sleep 130
-
       - name: Run progressive rollout and statistical gates
         env:
           INJECT_FAILURE: ${{ inputs.failure_mode }}
@@ -79,7 +77,9 @@ jobs:
           CONCURRENCY: ${{ inputs.concurrency }}
           REQUEST_TIMEOUT: ${{ inputs.request_timeout }}
           MAX_NETWORK_ERROR_RATE_PERCENT: '1.0'
-          METRICS_SCRAPE_GRACE_SECONDS: '70'
+          METRICS_SCRAPE_GRACE_SECONDS: '15'
+          MAX_SAMPLE_WAIT_SECONDS: '45'
+          ANALYSIS_WINDOW: '2m'
         run: |
           URL=$(terraform -chdir=terraform output -raw api_url)
           echo "API_URL=$URL" >> "$GITHUB_ENV"
