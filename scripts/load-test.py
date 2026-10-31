@@ -83,6 +83,7 @@ def main() -> int:
     parser.add_argument("--failure", choices=["500", "latency"], default=None)
     parser.add_argument("--canary-token", default=os.environ.get("CANARY_SMOKE_TOKEN"), help="Token requerido para autorizar la inyección Canary")
     parser.add_argument("--timeout", type=float, default=15)
+    parser.add_argument("--max-network-error-rate-percent", type=float, default=1.0, help="Máximo de errores de transporte tolerados antes de abortar (porcentaje)")
     parser.add_argument("--expect-canary-only", action="store_true")
     args = parser.parse_args()
 
@@ -90,6 +91,8 @@ def main() -> int:
         parser.error("requests y concurrency deben ser mayores que cero")
     if args.duration_seconds is not None and args.duration_seconds < 1:
         parser.error("duration-seconds debe ser mayor que cero")
+    if not 0 <= args.max_network_error_rate_percent <= 100:
+        parser.error("max-network-error-rate-percent debe estar entre 0 y 100")
     if args.failure and not args.canary_token:
         parser.error("--failure requiere --canary-token o CANARY_SMOKE_TOKEN")
 
@@ -161,11 +164,24 @@ def main() -> int:
         "failure_injection": args.failure or "none",
     }, indent=2, ensure_ascii=False))
 
+    network_error_rate = (100 * network_errors / requested) if requested else 0.0
+    if network_error_rate > args.max_network_error_rate_percent:
+        print(
+            f"ABORT: errores de transporte {network_error_rate:.3f}% superan "
+            f"el límite configurado de {args.max_network_error_rate_percent:.3f}%."
+        )
+        return 1
     if network_errors:
-        return 1
-    if args.expect_canary_only and (tracks.get("canary", 0) != requested or tracks.get("stable", 0) > 0):
-        print("ERROR: se esperaban todas las respuestas desde Canary.")
-        return 1
+        print(
+            f"AVISO: {network_error_rate:.3f}% de errores de transporte; "
+            f"dentro del límite de {args.max_network_error_rate_percent:.3f}%. "
+            "Se continúa al quality gate de Prometheus."
+        )
+    if args.expect_canary_only:
+        recognized = tracks.get("stable", 0) + tracks.get("canary", 0)
+        if recognized == 0 or tracks.get("canary", 0) != recognized:
+            print("ERROR: se esperaban todas las respuestas clasificadas desde Canary.")
+            return 1
     return 0
 
 

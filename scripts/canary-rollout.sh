@@ -5,8 +5,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 API_URL="${API_URL:-$(terraform -chdir="$ROOT_DIR/terraform" output -raw api_url)}"
 STAGE_DURATION_SECONDS="${STAGE_DURATION_SECONDS:-300}"
 METRICS_SCRAPE_GRACE_SECONDS="${METRICS_SCRAPE_GRACE_SECONDS:-70}"
-CONCURRENCY="${CONCURRENCY:-15}"
+CONCURRENCY="${CONCURRENCY:-8}"
 REQUEST_TIMEOUT="${REQUEST_TIMEOUT:-30}"
+MAX_NETWORK_ERROR_RATE_PERCENT="${MAX_NETWORK_ERROR_RATE_PERCENT:-$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["maxClientNetworkErrorRatePercent"])' "$ROOT_DIR/config/canary-slo.json")}"
 MAX_SAMPLE_WAIT_SECONDS="${MAX_SAMPLE_WAIT_SECONDS:-360}"
 INJECT_FAILURE="${INJECT_FAILURE:-none}"
 AWS_REGION="${AWS_REGION:-us-east-2}"
@@ -88,6 +89,7 @@ for percentage in 5 10 25 50; do
     --duration-seconds "$STAGE_DURATION_SECONDS" \
     --concurrency "$CONCURRENCY" \
     --timeout "$REQUEST_TIMEOUT" \
+    --max-network-error-rate-percent "$MAX_NETWORK_ERROR_RATE_PERCENT" \
     --path "/appointments" \
     "${FAILURE_ARG[@]}"; then
     echo "ABORT: la prueba de carga detectó errores de red o una condición inválida."
@@ -116,6 +118,7 @@ if ! python3 "$ROOT_DIR/scripts/load-test.py" \
   --requests 1000 \
   --concurrency "$CONCURRENCY" \
   --timeout "$REQUEST_TIMEOUT" \
+  --max-network-error-rate-percent "$MAX_NETWORK_ERROR_RATE_PERCENT" \
   --path "/appointments" \
   --expect-canary-only; then
   echo "La verificación posterior a la promoción falló; se revierte a Stable."

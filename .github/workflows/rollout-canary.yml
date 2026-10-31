@@ -18,8 +18,8 @@ on:
         description: 'Solicitudes concurrentes del generador de carga'
         required: true
         type: choice
-        options: ['10', '15', '20', '30']
-        default: '15'
+        options: ['5', '8', '10', '15', '20']
+        default: '10'
       request_timeout:
         description: 'Timeout máximo por petición HTTP (segundos)'
         required: true
@@ -78,6 +78,7 @@ jobs:
           STAGE_DURATION_SECONDS: ${{ inputs.stage_duration_seconds }}
           CONCURRENCY: ${{ inputs.concurrency }}
           REQUEST_TIMEOUT: ${{ inputs.request_timeout }}
+          MAX_NETWORK_ERROR_RATE_PERCENT: '1.0'
           METRICS_SCRAPE_GRACE_SECONDS: '70'
         run: |
           URL=$(terraform -chdir=terraform output -raw api_url)
