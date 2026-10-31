@@ -48,7 +48,7 @@ jobs:
       - name: Destroy Canary resources first (if deployed)
         run: |
           if terraform -chdir=terraform-canary state list | grep -q 'aws_ecs_cluster.canary'; then
-            ./scripts/set-canary-traffic.sh stable-only
+            bash scripts/set-canary-traffic.sh stable-only
             terraform -chdir=terraform-canary destroy -input=false -auto-approve \
               -var="tf_state_bucket=${TF_STATE_BUCKET}" \
               -var="image_tag=destroy-placeholder" || exit 1

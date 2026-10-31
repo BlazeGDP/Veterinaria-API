@@ -49,7 +49,7 @@ jobs:
         id: canary
         run: |
           if terraform -chdir=terraform-canary state list | grep -q 'aws_ecs_cluster.canary'; then
-            ./scripts/set-canary-traffic.sh stable-only
+            bash scripts/set-canary-traffic.sh stable-only
             TAG=$(terraform -chdir=terraform-canary output -raw canary_image_tag)
             echo "deployed=true" >> "$GITHUB_OUTPUT"
             echo "image_tag=$TAG" >> "$GITHUB_OUTPUT"
