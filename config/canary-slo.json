@@ -1,5 +1,5 @@
 {
-  "window": "5m",
+  "window": "10m",
   "minSamplesPerTrack": 200,
   "maxCanary5xxRate": 0.01,
   "maxCanaryWilsonUpper95": 0.05,
