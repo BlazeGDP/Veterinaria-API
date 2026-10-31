@@ -4,28 +4,39 @@ on:
   workflow_dispatch:
     inputs:
       failure_mode:
-        description: 'none para promoción o 500/latency para demostrar rollback'
+        description: 'Prueba normal o inyección controlada de fallo en Canary'
         required: true
         type: choice
-        options: [none, 500, latency]
+        options:
+          - none
+          - '500'
+          - latency
         default: none
       stage_duration_seconds:
-        description: 'Duración de carga por etapa; 120s recomendado para sustentación'
+        description: 'Duración de carga por etapa'
         required: true
         type: choice
-        options: ['120', '150', '180']
+        options:
+          - '120'
+          - '150'
+          - '180'
         default: '120'
       concurrency:
-        description: 'Solicitudes concurrentes del generador de carga'
+        description: 'Solicitudes concurrentes del generador'
         required: true
         type: choice
-        options: ['5', '8', '10', '15', '20']
+        options:
+          - '8'
+          - '10'
+          - '12'
         default: '10'
       request_timeout:
-        description: 'Timeout máximo por petición HTTP (segundos)'
+        description: 'Timeout máximo de cada petición HTTP'
         required: true
         type: choice
-        options: ['15', '30', '45']
+        options:
+          - '15'
+          - '30'
         default: '30'
 
 permissions:
@@ -77,8 +88,8 @@ jobs:
           CONCURRENCY: ${{ inputs.concurrency }}
           REQUEST_TIMEOUT: ${{ inputs.request_timeout }}
           MAX_NETWORK_ERROR_RATE_PERCENT: '1.0'
-          METRICS_SCRAPE_GRACE_SECONDS: '15'
-          MAX_SAMPLE_WAIT_SECONDS: '45'
+          METRICS_SCRAPE_GRACE_SECONDS: '40'
+          MAX_SAMPLE_WAIT_SECONDS: '70'
           ANALYSIS_WINDOW: '2m'
         run: |
           URL=$(terraform -chdir=terraform output -raw api_url)

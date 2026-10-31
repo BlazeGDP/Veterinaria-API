@@ -4,11 +4,11 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 API_URL="${API_URL:-$(terraform -chdir="$ROOT_DIR/terraform" output -raw api_url)}"
 STAGE_DURATION_SECONDS="${STAGE_DURATION_SECONDS:-120}"
-METRICS_SCRAPE_GRACE_SECONDS="${METRICS_SCRAPE_GRACE_SECONDS:-15}"
+METRICS_SCRAPE_GRACE_SECONDS="${METRICS_SCRAPE_GRACE_SECONDS:-40}"
 CONCURRENCY="${CONCURRENCY:-10}"
 REQUEST_TIMEOUT="${REQUEST_TIMEOUT:-30}"
 MAX_NETWORK_ERROR_RATE_PERCENT="${MAX_NETWORK_ERROR_RATE_PERCENT:-$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["maxClientNetworkErrorRatePercent"])' "$ROOT_DIR/config/canary-slo.json")}"
-MAX_SAMPLE_WAIT_SECONDS="${MAX_SAMPLE_WAIT_SECONDS:-45}"
+MAX_SAMPLE_WAIT_SECONDS="${MAX_SAMPLE_WAIT_SECONDS:-70}"
 ANALYSIS_WINDOW="${ANALYSIS_WINDOW:-2m}"
 INJECT_FAILURE="${INJECT_FAILURE:-none}"
 AWS_REGION="${AWS_REGION:-us-east-2}"
@@ -85,7 +85,7 @@ if [[ "$INJECT_FAILURE" != "none" ]]; then
 fi
 
 # Tres etapas de tráfico públicas satisfacen la rúbrica: 10%, 50% y 100%.
-# Dos etapas observadas de 120s son suficientes para una demo compacta con scrape cada 60s.
+# Dos etapas de 120s y una gracia de 40s permiten ingerir scrapes de Grafana cada 30s.
 for percentage in 10 50; do
   echo "=== Etapa Canary ${percentage}% (Stable $((100-percentage))%) ==="
   AWS_REGION="$AWS_REGION" bash "$ROOT_DIR/scripts/set-canary-traffic.sh" "$percentage"
@@ -98,13 +98,14 @@ for percentage in 10 50; do
     --timeout "$REQUEST_TIMEOUT" \
     --max-network-error-rate-percent "$MAX_NETWORK_ERROR_RATE_PERCENT" \
     --path "/appointments" \
+    --close-connection \
     "${FAILURE_ARG[@]}"; then
     echo "ABORT: la prueba de carga superó el presupuesto de errores de transporte o falló."
     rollback
     exit 1
   fi
 
-  echo "Esperando ${METRICS_SCRAPE_GRACE_SECONDS}s para que Grafana Cloud ingiera el último scrape."
+  echo "Esperando ${METRICS_SCRAPE_GRACE_SECONDS}s para que Grafana Cloud ingiera el scrape (jobs configurados a 30s)."
   sleep "$METRICS_SCRAPE_GRACE_SECONDS"
   if ! wait_for_quality_gate; then exit 1; fi
 done

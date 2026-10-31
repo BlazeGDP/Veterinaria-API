@@ -66,8 +66,13 @@ def duration_worker(
         "statuses": collections.Counter(),
         "network_error_examples": collections.Counter(),
     }
-    while time.perf_counter() < deadline:
-        item = one_request(url, failure_mode, canary_token, timeout, close_connection)
+    while True:
+        remaining = deadline - time.perf_counter()
+        if remaining <= 0:
+            break
+        # Do not let the final in-flight request extend the bake time by the full HTTP timeout.
+        request_timeout = min(timeout, max(0.5, remaining))
+        item = one_request(url, failure_mode, canary_token, request_timeout, close_connection)
         stats["tracks"][item["track"]] += 1
         stats["versions"][item["version"]] += 1
         stats["statuses"][str(item["status"])] += 1
