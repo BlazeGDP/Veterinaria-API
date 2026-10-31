@@ -381,3 +381,12 @@ El repositorio contiene el SLO, los scripts de rollout, el dashboard y la docume
 - Los porcentajes del ALB son ponderaciones de enrutamiento, no una garantía matemática del conteo exacto de solicitudes. Por eso `load-test.py` mide la distribución observada.
 - La métrica de saturación se calcula en cada proceso con relación a los límites de CPU/memoria Fargate configurados; el quality gate revisa el máximo de la ventana y ECS Container Insights también permanece habilitado.
 - Antes de ejecutar los workflows, verifica que el usuario IAM existente tenga permisos para ALB listener rules, `ModifyListener`, `DescribeListeners` y `DescribeTargetHealth`, ECS, ECR (`BatchDeleteImage` incluido), RDS, EC2/VPC, Secrets Manager, CloudWatch Logs, `iam:PassRole` y actualización de la inline policy existente (`iam:PutRolePolicy`), además de lectura/escritura del bucket S3 (incluido el lockfile `.tflock`). Si recibes `AccessDenied`, verifica también las SCP de AWS Organizations. No se cambian ni se exponen las credenciales existentes.
+
+
+### Corrección de ejecución del rollout y dashboard ampliado
+
+El workflow ejecuta `bash ./scripts/canary-rollout.sh` y el script invoca `set-canary-traffic.sh` mediante `bash`. Esto evita depender del bit ejecutable de Git (especialmente al editar desde Windows). El paso de preflight `scripts/check-grafana.py` consulta Prometheus con las credenciales configuradas y distingue errores HTTP 401, 403 y 404 antes de modificar el tráfico.
+
+Para ver las métricas del proyecto, importa `observability/grafana-dashboard.json` desde **Dashboards → New → Import** y selecciona el datasource Prometheus de tu Stack. El dashboard personalizado se llama **Veterinaria API — Canary vs Stable**. El dashboard **Metrics Endpoint Overview** es el tablero genérico de la integración y puedes conservarlo; no es el tablero de métricas de la API.
+
+El dashboard personalizado muestra solicitudes/s, porcentaje observado de tráfico Canary, tasas 4xx/5xx, latencia p50/p95/p99, saturación de CPU/memoria, tamaño de muestra en cinco minutos, consultas del listado de citas, citas creadas y llamadas al nuevo endpoint de resumen. Las métricas provienen de `src/observability/metrics.ts`.

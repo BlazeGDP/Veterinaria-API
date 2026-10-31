@@ -17,9 +17,15 @@ from typing import Any, Optional
 
 def query_prometheus(base_url: str, username: str, token: str, expression: str) -> Optional[float]:
     endpoint = base_url.rstrip("/")
-    if not endpoint.endswith("/api/prom"):
-        endpoint += "/api/prom"
-    url = endpoint + "/api/v1/query?" + urllib.parse.urlencode({"query": expression})
+    if endpoint.endswith("/api/prom/api/v1/query"):
+        query_endpoint = endpoint
+    elif endpoint.endswith("/api/v1/query"):
+        query_endpoint = endpoint
+    elif endpoint.endswith("/api/prom"):
+        query_endpoint = endpoint + "/api/v1/query"
+    else:
+        query_endpoint = endpoint + "/api/prom/api/v1/query"
+    url = query_endpoint + "?" + urllib.parse.urlencode({"query": expression})
     credentials = base64.b64encode(f"{username}:{token}".encode()).decode()
     request = urllib.request.Request(url, headers={"Authorization": f"Basic {credentials}", "Accept": "application/json"})
     with urllib.request.urlopen(request, timeout=25) as response:

@@ -14,7 +14,7 @@ export CANARY_SMOKE_TOKEN
 
 rollback() {
   echo "\nQUALITY GATE FALLÓ: rollback inmediato a 0% Canary / 100% Stable."
-  AWS_REGION="$AWS_REGION" "$ROOT_DIR/scripts/set-canary-traffic.sh" 0 || true
+  AWS_REGION="$AWS_REGION" bash "$ROOT_DIR/scripts/set-canary-traffic.sh" 0 || true
 }
 
 run_analysis() {
@@ -75,7 +75,7 @@ wait_for_quality_gate() {
 
 for percentage in 5 10 25 50; do
   echo "\n=== Etapa Canary ${percentage}% ==="
-  AWS_REGION="$AWS_REGION" "$ROOT_DIR/scripts/set-canary-traffic.sh" "$percentage"
+  AWS_REGION="$AWS_REGION" bash "$ROOT_DIR/scripts/set-canary-traffic.sh" "$percentage"
 
   FAILURE_ARG=()
   if [[ "$INJECT_FAILURE" != "none" ]]; then
@@ -104,13 +104,17 @@ for percentage in 5 10 25 50; do
 done
 
 echo "\n=== Promoción final: 100% Canary ==="
-AWS_REGION="$AWS_REGION" "$ROOT_DIR/scripts/set-canary-traffic.sh" 100
-python3 "$ROOT_DIR/scripts/load-test.py" \
+AWS_REGION="$AWS_REGION" bash "$ROOT_DIR/scripts/set-canary-traffic.sh" 100
+if ! python3 "$ROOT_DIR/scripts/load-test.py" \
   --url "$API_URL" \
   --requests 1000 \
   --concurrency "$CONCURRENCY" \
   --path "/appointments" \
-  --expect-canary-only
+  --expect-canary-only; then
+  echo "La verificación posterior a la promoción falló; se revierte a Stable."
+  rollback
+  exit 1
+fi
 
 echo "Promoción completada: 100% del tráfico público a V3.1 Canary."
-echo "Rollback manual: AWS_REGION=$AWS_REGION $ROOT_DIR/scripts/set-canary-traffic.sh 0"
+echo "Rollback manual: AWS_REGION=$AWS_REGION bash $ROOT_DIR/scripts/set-canary-traffic.sh 0"

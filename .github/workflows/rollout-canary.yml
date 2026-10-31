@@ -53,6 +53,7 @@ jobs:
           test -n "$GRAFANA_PROMETHEUS_URL"
           test -n "$GRAFANA_PROMETHEUS_USER"
           test -n "$GRAFANA_PROMETHEUS_READ_TOKEN"
+          python3 scripts/check-grafana.py
           terraform -chdir=terraform init -input=false -backend-config="bucket=${TF_STATE_BUCKET}"
           terraform -chdir=terraform-canary init -input=false -backend-config="bucket=${TF_STATE_BUCKET}"
 
@@ -71,4 +72,4 @@ jobs:
           TOKEN=$(terraform -chdir=terraform output -raw metrics_bearer_token)
           echo "::add-mask::$TOKEN"
           export CANARY_SMOKE_TOKEN="$TOKEN"
-          ./scripts/canary-rollout.sh
+          bash ./scripts/canary-rollout.sh
