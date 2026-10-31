@@ -1,29 +1,32 @@
-name: Deploy V3 to AWS
+name: Deploy V3.0 Stable to AWS
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: terraform-v3
+  group: terraform-v3-infrastructure
   cancel-in-progress: false
 
 env:
   AWS_REGION: us-east-2
   PROJECT_NAME: api-restful-veterinaria
+  TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
 
 jobs:
-  deploy:
+  deploy-stable:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Validate required configuration
+        run: |
+          test -n "$TF_STATE_BUCKET" || { echo "Configura la variable de repositorio TF_STATE_BUCKET"; exit 1; }
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
@@ -36,27 +39,17 @@ jobs:
       - name: Verify AWS identity
         run: aws sts get-caller-identity
 
-      - name: Resolve Terraform state bucket
-        run: |
-          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          echo "TF_STATE_BUCKET=${PROJECT_NAME}-tf-state-${ACCOUNT_ID}" >> "$GITHUB_ENV"
-
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
-      - name: Terraform format check
+      - name: Terraform init, format and validate
         working-directory: terraform
-        run: terraform fmt -check -recursive
+        run: |
+          terraform init -input=false -backend-config="bucket=${TF_STATE_BUCKET}"
+          terraform fmt -recursive
+          terraform validate
 
-      - name: Terraform init
-        working-directory: terraform
-        run: terraform init -input=false -backend-config="bucket=${TF_STATE_BUCKET}"
-
-      - name: Terraform validate
-        working-directory: terraform
-        run: terraform validate
-
-      - name: Create ECR repository first
+      - name: Create ECR repository
         working-directory: terraform
         run: |
           terraform apply -input=false -auto-approve \
@@ -67,80 +60,64 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and push Docker image
+      - name: Build and push immutable Stable image
         env:
           REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
+          IMAGE_TAG: stable-${{ github.sha }}-${{ github.run_id }}
         run: |
-          docker build -t $REGISTRY/${{ env.PROJECT_NAME }}-api:$IMAGE_TAG .
-          docker tag $REGISTRY/${{ env.PROJECT_NAME }}-api:$IMAGE_TAG $REGISTRY/${{ env.PROJECT_NAME }}-api:latest
-          docker push $REGISTRY/${{ env.PROJECT_NAME }}-api:$IMAGE_TAG
-          docker push $REGISTRY/${{ env.PROJECT_NAME }}-api:latest
+          docker build --build-arg APP_VERSION=3.0.0 \
+            -t "$REGISTRY/${PROJECT_NAME}-api:$IMAGE_TAG" .
+          docker push "$REGISTRY/${PROJECT_NAME}-api:$IMAGE_TAG"
+          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
 
-      - name: Terraform apply infrastructure and ECS deployment
+      - name: Apply Stable infrastructure and deployment
         working-directory: terraform
         run: |
           terraform apply -input=false -auto-approve \
-            -var="image_tag=${{ github.sha }}"
+            -var="image_tag=${IMAGE_TAG}" \
+            -var="api_version=3.0.0"
 
-      - name: Wait for ECS service
+      - name: Wait for Stable ECS service
         run: |
           aws ecs wait services-stable \
-            --cluster ${{ env.PROJECT_NAME }}-cluster \
-            --services ${{ env.PROJECT_NAME }}-service
+            --cluster "${PROJECT_NAME}-cluster" \
+            --services "${PROJECT_NAME}-service"
 
-      - name: Initialize PostgreSQL schema
+      - name: Initialize PostgreSQL schema (idempotent)
         working-directory: terraform
         run: |
           SUBNETS=$(terraform output -json private_subnet_ids | jq -r 'join(",")')
           SECURITY_GROUP=$(terraform output -raw ecs_security_group_id)
           TASK_DEFINITION=$(terraform output -raw ecs_task_definition_arn)
           CLUSTER=$(terraform output -raw ecs_cluster_name)
-
           TASK_ARN=$(aws ecs run-task \
             --cluster "$CLUSTER" \
             --launch-type FARGATE \
             --task-definition "$TASK_DEFINITION" \
             --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUP],assignPublicIp=DISABLED}" \
             --overrides '{"containerOverrides":[{"name":"api","command":["node","scripts/init-database.js"]}]}' \
-            --query 'tasks[0].taskArn' \
-            --output text)
+            --query 'tasks[0].taskArn' --output text)
+          test -n "$TASK_ARN" && test "$TASK_ARN" != "None"
+          aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$TASK_ARN"
+          EXIT_CODE=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK_ARN" \
+            --query 'tasks[0].containers[0].exitCode' --output text)
+          test "$EXIT_CODE" = "0" || { echo "Falló la inicialización PostgreSQL: $EXIT_CODE"; exit 1; }
 
-          if [ -z "$TASK_ARN" ] || [ "$TASK_ARN" = "None" ]; then
-            echo "No se pudo iniciar la tarea de inicialización."
-            exit 1
-          fi
-
-          aws ecs wait tasks-stopped \
-            --cluster "$CLUSTER" \
-            --tasks "$TASK_ARN"
-
-          EXIT_CODE=$(aws ecs describe-tasks \
-            --cluster "$CLUSTER" \
-            --tasks "$TASK_ARN" \
-            --query 'tasks[0].containers[0].exitCode' \
-            --output text)
-
-          if [ "$EXIT_CODE" != "0" ]; then
-            echo "La inicialización de PostgreSQL falló con exit code $EXIT_CODE."
-            exit 1
-          fi
-
-      - name: Smoke test /health
+      - name: Smoke test Stable
         working-directory: terraform
         run: |
           URL=$(terraform output -raw api_url)
-          for i in $(seq 1 20); do
-            if curl -fsS "$URL/health"; then
-              echo
+          for attempt in $(seq 1 20); do
+            if curl -fsS -D /tmp/headers "$URL/health" -o /tmp/body; then
+              grep -qi '^X-App-Version: 3.0.0' /tmp/headers
+              grep -qi '^X-App-Track: stable' /tmp/headers
+              cat /tmp/body
               exit 0
             fi
-            echo "Intento $i/20 falló, reintentando en 15s..."
             sleep 15
           done
-          echo "La API no respondió en /health."
-          exit 1
+          echo "Stable no respondió correctamente"; exit 1
 
-      - name: Show deployment URL
+      - name: Show Stable URL
         working-directory: terraform
         run: terraform output api_url

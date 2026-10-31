@@ -1,0 +1,103 @@
+name: Deploy V3.1 Canary to AWS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-v3-infrastructure
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-2
+  PROJECT_NAME: api-restful-veterinaria
+  TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+
+jobs:
+  deploy-canary:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Validate required configuration
+        run: |
+          test -n "$TF_STATE_BUCKET" || { echo "Configura TF_STATE_BUCKET en Repository Variables"; exit 1; }
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Initialize Stable state and read ECR
+        working-directory: terraform
+        run: |
+          terraform init -input=false -backend-config="bucket=${TF_STATE_BUCKET}"
+          terraform validate
+          terraform output -raw ecr_repository_url >/dev/null
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push immutable Canary image
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: canary-${{ github.sha }}-${{ github.run_id }}
+        run: |
+          docker build --build-arg APP_VERSION=3.1.0 \
+            -t "$REGISTRY/${PROJECT_NAME}-api:$IMAGE_TAG" .
+          docker push "$REGISTRY/${PROJECT_NAME}-api:$IMAGE_TAG"
+          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
+
+      - name: Initialize Canary Terraform state
+        working-directory: terraform-canary
+        run: |
+          terraform init -input=false -backend-config="bucket=${TF_STATE_BUCKET}"
+          terraform fmt -recursive
+          terraform validate
+
+      - name: Create Canary cluster, service and routes
+        working-directory: terraform-canary
+        run: |
+          terraform apply -input=false -auto-approve \
+            -var="tf_state_bucket=${TF_STATE_BUCKET}" \
+            -var="image_tag=${IMAGE_TAG}" \
+            -var="api_version=3.1.0"
+
+      - name: Wait for Canary ECS service and healthy ALB target
+        run: |
+          aws ecs wait services-stable \
+            --cluster "${PROJECT_NAME}-canary-cluster" \
+            --services "${PROJECT_NAME}-canary-service"
+          TG=$(terraform -chdir=terraform-canary output -raw canary_target_group_arn)
+          for attempt in $(seq 1 10); do
+            HEALTHY=$(aws elbv2 describe-target-health --target-group-arn "$TG" \
+              --query 'length(TargetHealthDescriptions[?TargetHealth.State==`healthy`])' --output text)
+            if [ "$HEALTHY" -ge 1 ]; then exit 0; fi
+            sleep 15
+          done
+          echo "No hay targets Canary healthy en el ALB"; exit 1
+
+      - name: Smoke test Canary at 0 percent public traffic
+        run: |
+          URL=$(terraform -chdir=terraform output -raw api_url)
+          TOKEN=$(terraform -chdir=terraform output -raw metrics_bearer_token)
+          curl -fsS -D /tmp/canary-headers -H 'x-canary: true' -H "x-canary-token: $TOKEN" "$URL/health" -o /tmp/canary-health.json
+          grep -qi '^X-App-Version: 3.1.0' /tmp/canary-headers
+          grep -qi '^X-App-Track: canary' /tmp/canary-headers
+          curl -fsS -H 'x-canary: true' -H "x-canary-token: $TOKEN" "$URL/appointments/summary" | tee /tmp/canary-summary.json
+          grep -q '"track":"canary"' /tmp/canary-summary.json
+          echo "Canary funciona; el tráfico público sigue en 100% Stable / 0% Canary."
+          cat /tmp/canary-health.json
+
+      - name: Show Canary URL
+        run: terraform -chdir=terraform output api_url

@@ -81,3 +81,9 @@ variable "image_tag" {
   type        = string
   default     = "latest"
 }
+
+variable "api_version" {
+  description = "Versión semántica publicada por la API estable."
+  type        = string
+  default     = "3.0.0"
+}

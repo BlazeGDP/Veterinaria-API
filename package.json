@@ -1,6 +1,6 @@
 {
   "name": "api-restfull-veterinaria",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "private": true,
   "description": "API RESTful Veterinaria - V3 desplegada en AWS con Terraform",
   "scripts": {

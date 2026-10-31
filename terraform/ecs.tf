@@ -39,6 +39,30 @@ resource "aws_ecs_task_definition" "api" {
           value = "production"
         },
         {
+          name  = "APP_VERSION"
+          value = var.api_version
+        },
+        {
+          name  = "APP_TRACK"
+          value = "stable"
+        },
+        {
+          name  = "CANARY_FEATURE_ENABLED"
+          value = "false"
+        },
+        {
+          name  = "CANARY_FAILURE_ENABLED"
+          value = "false"
+        },
+        {
+          name  = "APP_CPU_CORES"
+          value = tostring(var.ecs_cpu / 1024)
+        },
+        {
+          name  = "APP_MEMORY_LIMIT_MB"
+          value = tostring(var.ecs_memory)
+        },
+        {
           name  = "PORT"
           value = tostring(var.container_port)
         },
@@ -68,6 +92,10 @@ resource "aws_ecs_task_definition" "api" {
         {
           name      = "DATABASE_PASSWORD"
           valueFrom = "${aws_secretsmanager_secret.db.arn}:password::"
+        },
+        {
+          name      = "METRICS_BEARER_TOKEN"
+          valueFrom = aws_secretsmanager_secret.metrics.arn
         }
       ]
 
@@ -82,7 +110,10 @@ resource "aws_ecs_task_definition" "api" {
     }
   ])
 
-  depends_on = [aws_secretsmanager_secret_version.db]
+  depends_on = [
+    aws_secretsmanager_secret_version.db,
+    aws_secretsmanager_secret_version.metrics,
+  ]
 
   tags = {
     Name = "${var.project_name}-task-definition"

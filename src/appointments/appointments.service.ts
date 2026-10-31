@@ -10,6 +10,11 @@ import { Appointment } from './appointment.entity';
 import { Pet } from '../pets/pet.entity';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
+import {
+  recordAppointmentCreated,
+  recordAppointmentListQuery,
+  recordAppointmentSummaryQuery,
+} from '../observability/metrics';
 
 @Injectable()
 export class AppointmentsService {
@@ -42,15 +47,63 @@ export class AppointmentsService {
     });
 
     await this.appointmentsRepository.save(appointment);
+    recordAppointmentCreated();
     return this.findOne(appointment.id);
   }
 
   async findAll(fecha?: string): Promise<Appointment[]> {
+    recordAppointmentListQuery();
     return this.findAllEntities(fecha);
   }
 
   async findOne(id: string): Promise<Appointment> {
     return this.findOneEntity(id);
+  }
+
+  async getSummary(desde?: string, hasta?: string) {
+    recordAppointmentSummaryQuery();
+
+    const query = this.appointmentsRepository
+      .createQueryBuilder('appointment')
+      .select('appointment.estado', 'estado')
+      .addSelect('COUNT(appointment.id)', 'cantidad')
+      .groupBy('appointment.estado');
+
+    if (desde) {
+      const start = new Date(`${desde}T00:00:00.000Z`);
+      if (Number.isNaN(start.getTime())) {
+        throw new ConflictException('El parámetro desde debe tener formato YYYY-MM-DD');
+      }
+      query.andWhere('appointment.fecha >= :start', { start });
+    }
+
+    if (hasta) {
+      const end = new Date(`${hasta}T00:00:00.000Z`);
+      if (Number.isNaN(end.getTime())) {
+        throw new ConflictException('El parámetro hasta debe tener formato YYYY-MM-DD');
+      }
+      end.setUTCDate(end.getUTCDate() + 1);
+      query.andWhere('appointment.fecha < :end', { end });
+    }
+
+    const rows = await query.getRawMany<{ estado: string; cantidad: string }>();
+    const porEstado = { scheduled: 0, completed: 0, cancelled: 0 };
+
+    for (const row of rows) {
+      if (row.estado in porEstado) {
+        porEstado[row.estado as keyof typeof porEstado] = Number(row.cantidad);
+      }
+    }
+
+    return {
+      version: process.env.APP_VERSION || 'local',
+      track: process.env.APP_TRACK || 'local',
+      desde: desde ?? null,
+      hasta: hasta ?? null,
+      total: Object.values(porEstado).reduce((sum, value) => sum + value, 0),
+      porEstado,
+      generadoEn: new Date().toISOString(),
+    };
   }
 
   async update(

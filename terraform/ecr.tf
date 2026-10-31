@@ -1,6 +1,6 @@
 resource "aws_ecr_repository" "api" {
   name                 = "${var.project_name}-api"
-  image_tag_mutability = "MUTABLE"
+  image_tag_mutability = "IMMUTABLE"
   force_delete         = true
 
   image_scanning_configuration {
@@ -19,11 +19,12 @@ resource "aws_ecr_lifecycle_policy" "api" {
     rules = [
       {
         rulePriority = 1
-        description  = "Keep only the last 5 images"
+        description  = "Expire only untagged images older than 7 days; preserve deployed immutable tags"
         selection = {
-          tagStatus   = "any"
-          countType   = "imageCountMoreThan"
-          countNumber = 5
+          tagStatus   = "untagged"
+          countType   = "sinceImagePushed"
+          countUnit   = "days"
+          countNumber = 7
         }
         action = {
           type = "expire"

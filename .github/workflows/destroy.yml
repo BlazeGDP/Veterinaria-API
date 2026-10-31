@@ -1,13 +1,10 @@
-name: Destroy V3 from AWS
-
-# Elimina TODA la infraestructura creada por Terraform (VPC, NAT, ALB, ECS, RDS, ECR, Secrets, Logs).
-# Se ejecuta SOLO a mano: Actions > "Destroy V3 from AWS" > Run workflow > escribir DESTROY.
+name: Destroy all Veterinaria API AWS infrastructure
 
 on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: 'Escribe DESTROY para confirmar la eliminación de la infraestructura'
+        description: 'Escribe DESTROY-ALL para eliminar toda la infraestructura'
         required: true
         type: string
 
@@ -15,18 +12,18 @@ permissions:
   contents: read
 
 concurrency:
-  group: terraform-v3
+  group: terraform-v3-infrastructure
   cancel-in-progress: false
 
 env:
   AWS_REGION: us-east-2
   PROJECT_NAME: api-restful-veterinaria
+  TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
 
 jobs:
   destroy:
-    if: ${{ inputs.confirm == 'DESTROY' }}
+    if: ${{ inputs.confirm == 'DESTROY-ALL' }}
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -39,18 +36,26 @@ jobs:
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Resolve Terraform state bucket
-        run: |
-          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          echo "TF_STATE_BUCKET=${PROJECT_NAME}-tf-state-${ACCOUNT_ID}" >> "$GITHUB_ENV"
-
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
-      - name: Terraform init
-        working-directory: terraform
-        run: terraform init -input=false -backend-config="bucket=${TF_STATE_BUCKET}"
+      - name: Initialize Terraform states
+        run: |
+          test -n "$TF_STATE_BUCKET"
+          terraform -chdir=terraform init -input=false -backend-config="bucket=${TF_STATE_BUCKET}"
+          terraform -chdir=terraform-canary init -input=false -backend-config="bucket=${TF_STATE_BUCKET}"
 
-      - name: Terraform destroy
+      - name: Destroy Canary resources first (if deployed)
+        run: |
+          if terraform -chdir=terraform-canary state list | grep -q 'aws_ecs_cluster.canary'; then
+            ./scripts/set-canary-traffic.sh stable-only
+            terraform -chdir=terraform-canary destroy -input=false -auto-approve \
+              -var="tf_state_bucket=${TF_STATE_BUCKET}" \
+              -var="image_tag=destroy-placeholder" || exit 1
+          else
+            echo "No hay recursos Canary en el state; se omite."
+          fi
+
+      - name: Destroy Stable and shared infrastructure
         working-directory: terraform
         run: terraform destroy -input=false -auto-approve

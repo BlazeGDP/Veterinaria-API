@@ -1,3 +1,5 @@
+ARG APP_VERSION=3.0.0
+
 FROM node:24-alpine AS builder
 
 WORKDIR /app
@@ -9,6 +11,9 @@ COPY . .
 RUN npm run build
 
 FROM node:24-alpine AS production
+
+ARG APP_VERSION=3.0.0
+LABEL org.opencontainers.image.version="${APP_VERSION}"
 
 WORKDIR /app
 ENV NODE_ENV=production

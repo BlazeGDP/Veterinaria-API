@@ -6,6 +6,8 @@ export class HealthController {
   check() {
     return {
       status: 'ok',
+      version: process.env.APP_VERSION || 'local',
+      track: process.env.APP_TRACK || 'local',
     };
   }
 }

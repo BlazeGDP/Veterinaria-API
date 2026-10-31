@@ -21,3 +21,22 @@ resource "aws_secretsmanager_secret_version" "db" {
     password = random_password.db.result
   })
 }
+
+resource "random_password" "metrics" {
+  length  = 48
+  special = false
+}
+
+resource "aws_secretsmanager_secret" "metrics" {
+  name                    = "${var.project_name}/metrics"
+  recovery_window_in_days = 0
+
+  tags = {
+    Name = "${var.project_name}-metrics-secret"
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "metrics" {
+  secret_id     = aws_secretsmanager_secret.metrics.id
+  secret_string = random_password.metrics.result
+}

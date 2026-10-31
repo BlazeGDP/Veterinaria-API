@@ -8,6 +8,7 @@ import {
   Patch,
   Post,
   Query,
+  NotFoundException,
 } from '@nestjs/common';
 
 import { AppointmentsService } from './appointments.service';
@@ -29,6 +30,17 @@ export class AppointmentsController {
   @Get()
   findAll(@Query('fecha') fecha?: string): Promise<Appointment[]> {
     return this.appointmentsService.findAll(fecha);
+  }
+
+  @Get('summary')
+  getSummary(
+    @Query('desde') desde?: string,
+    @Query('hasta') hasta?: string,
+  ) {
+    if (process.env.CANARY_FEATURE_ENABLED !== 'true') {
+      throw new NotFoundException('Endpoint disponible en api/v3.1 Canary');
+    }
+    return this.appointmentsService.getSummary(desde, hasta);
   }
 
   @Get(':id')

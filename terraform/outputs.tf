@@ -62,3 +62,49 @@ output "api_url" {
   description = "URL pública de la API."
   value       = "http://${aws_lb.api.dns_name}"
 }
+
+output "stable_target_group_arn" {
+  description = "Target Group de la API estable V3.0."
+  value       = aws_lb_target_group.api.arn
+}
+
+output "alb_listener_arn" {
+  description = "Listener HTTP compartido por los tracks."
+  value       = aws_lb_listener.http.arn
+}
+
+output "alb_arn" {
+  description = "ARN del ALB compartido."
+  value       = aws_lb.api.arn
+}
+
+output "ecs_task_execution_role_arn" {
+  description = "Rol de ejecución compartido por las tareas ECS."
+  value       = aws_iam_role.ecs_task_execution.arn
+}
+
+output "metrics_secret_arn" {
+  description = "Secreto Bearer de autenticación para los endpoints Prometheus."
+  value       = aws_secretsmanager_secret.metrics.arn
+}
+
+output "api_version" {
+  description = "Versión semántica del track estable."
+  value       = var.api_version
+}
+
+output "db_name" {
+  description = "Nombre de la base de datos PostgreSQL compartida."
+  value       = var.db_name
+}
+
+output "metrics_bearer_token" {
+  description = "Token Bearer para scrape Prometheus y acceso de humo a Canary."
+  value       = random_password.metrics.result
+  sensitive   = true
+}
+
+output "stable_image_tag" {
+  description = "Tag inmutable desplegado en Stable."
+  value       = var.image_tag
+}

@@ -10,3 +10,12 @@ terraform/.terraform
 terraform/*.tfstate
 terraform/*.tfstate.*
 *.tsbuildinfo
+terraform-canary/.terraform
+terraform-canary/*.tfstate
+terraform-canary/*.tfstate.*
+config
+observability
+scripts/canary-analysis.py
+scripts/canary-rollout.sh
+scripts/set-canary-traffic.sh
+scripts/load-test.py

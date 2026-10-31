@@ -44,3 +44,19 @@ resource "aws_lb_listener" "http" {
     target_group_arn = aws_lb_target_group.api.arn
   }
 }
+# Ruta fija para que Grafana Cloud consulte únicamente métricas de Stable.
+resource "aws_lb_listener_rule" "stable_metrics" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 20
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.api.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/metrics/stable"]
+    }
+  }
+}

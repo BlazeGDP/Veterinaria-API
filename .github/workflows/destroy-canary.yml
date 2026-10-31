@@ -1,0 +1,80 @@
+name: Destroy V3.1 Canary only
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Escribe DESTROY-CANARY para eliminar el clúster V3.1'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-v3-infrastructure
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-2
+  PROJECT_NAME: api-restful-veterinaria
+  TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+
+jobs:
+  destroy-canary:
+    if: ${{ inputs.confirm == 'DESTROY-CANARY' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Initialize state files
+        run: |
+          test -n "$TF_STATE_BUCKET"
+          terraform -chdir=terraform init -input=false -backend-config="bucket=${TF_STATE_BUCKET}"
+          terraform -chdir=terraform-canary init -input=false -backend-config="bucket=${TF_STATE_BUCKET}"
+
+      - name: Detect deployed Canary resources and capture image tag
+        id: canary
+        run: |
+          if terraform -chdir=terraform-canary state list | grep -q 'aws_ecs_cluster.canary'; then
+            ./scripts/set-canary-traffic.sh stable-only
+            TAG=$(terraform -chdir=terraform-canary output -raw canary_image_tag)
+            echo "deployed=true" >> "$GITHUB_OUTPUT"
+            echo "image_tag=$TAG" >> "$GITHUB_OUTPUT"
+          else
+            echo "deployed=false" >> "$GITHUB_OUTPUT"
+            echo "No hay recursos Canary que destruir."
+          fi
+
+      - name: Destroy only V3.1 resources
+        if: steps.canary.outputs.deployed == 'true'
+        working-directory: terraform-canary
+        run: |
+          terraform destroy -input=false -auto-approve \
+            -var="tf_state_bucket=${TF_STATE_BUCKET}" \
+            -var="image_tag=${{ steps.canary.outputs.image_tag }}"
+
+      - name: Delete Canary image from shared ECR
+        if: steps.canary.outputs.deployed == 'true'
+        run: |
+          aws ecr batch-delete-image \
+            --repository-name "${PROJECT_NAME}-api" \
+            --image-ids imageTag='${{ steps.canary.outputs.image_tag }}' || true
+
+      - name: Confirm Stable remains online
+        run: |
+          URL=$(terraform -chdir=terraform output -raw api_url)
+          curl -fsS "$URL/health"
+          echo "V3.1 fue destruida; V3.0 Stable sigue disponible en $URL"

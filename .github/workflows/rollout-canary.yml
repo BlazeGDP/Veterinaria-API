@@ -1,0 +1,74 @@
+name: Canary rollout with statistical quality gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      failure_mode:
+        description: 'none para promoción o 500/latency para demostrar rollback'
+        required: true
+        type: choice
+        options: [none, 500, latency]
+        default: none
+      stage_duration_seconds:
+        description: 'Duración de carga concurrente por etapa (segundos)'
+        required: true
+        default: '300'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-v3-infrastructure
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-2
+  TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+  GRAFANA_PROMETHEUS_URL: ${{ secrets.GRAFANA_PROMETHEUS_URL }}
+  GRAFANA_PROMETHEUS_USER: ${{ secrets.GRAFANA_PROMETHEUS_USER }}
+  GRAFANA_PROMETHEUS_READ_TOKEN: ${{ secrets.GRAFANA_PROMETHEUS_READ_TOKEN }}
+
+jobs:
+  rollout:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Validate Grafana access and initialize both Terraform states
+        run: |
+          test -n "$TF_STATE_BUCKET"
+          test -n "$GRAFANA_PROMETHEUS_URL"
+          test -n "$GRAFANA_PROMETHEUS_USER"
+          test -n "$GRAFANA_PROMETHEUS_READ_TOKEN"
+          terraform -chdir=terraform init -input=false -backend-config="bucket=${TF_STATE_BUCKET}"
+          terraform -chdir=terraform-canary init -input=false -backend-config="bucket=${TF_STATE_BUCKET}"
+
+      - name: Allow Grafana Cloud to collect baseline samples
+        run: sleep 130
+
+      - name: Run progressive rollout and statistical gates
+        env:
+          INJECT_FAILURE: ${{ inputs.failure_mode }}
+          STAGE_DURATION_SECONDS: ${{ inputs.stage_duration_seconds }}
+          METRICS_SCRAPE_GRACE_SECONDS: '70'
+        run: |
+          URL=$(terraform -chdir=terraform output -raw api_url)
+          echo "API_URL=$URL" >> "$GITHUB_ENV"
+          export API_URL="$URL"
+          TOKEN=$(terraform -chdir=terraform output -raw metrics_bearer_token)
+          echo "::add-mask::$TOKEN"
+          export CANARY_SMOKE_TOKEN="$TOKEN"
+          ./scripts/canary-rollout.sh
