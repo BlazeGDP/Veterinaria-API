@@ -118,6 +118,10 @@ jobs:
           done
           echo "Stable no respondió correctamente"; exit 1
 
-      - name: Show Stable URL
+      - name: Show Stable and Metrics URLs
         working-directory: terraform
-        run: terraform output api_url
+        run: |
+          echo "Stable API URL:"
+          terraform output api_url
+          echo "Grafana HTTPS metrics URL:"
+          terraform output metrics_https_url

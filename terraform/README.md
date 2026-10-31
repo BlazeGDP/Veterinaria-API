@@ -15,9 +15,10 @@ El estado remoto vive en el bucket indicado en `TF_STATE_BUCKET`, bajo la key `a
 | `iam.tf` | ECS Task Execution Role y lectura de Secrets Manager |
 | `ecr.tf` | Repositorio ECR con tags inmutables |
 | `alb.tf` | ALB, Target Group Stable, listener y ruta `/metrics/stable` |
+| `cloudfront-metrics.tf` | URL HTTPS CloudFront para los jobs de Grafana (sin caché) |
 | `ecs.tf` | Cluster, Task Definition y Service Stable |
 | `cloudwatch.tf` | Logs de la API Stable |
-| `outputs.tf` | Outputs que consume el stack Canary |
+| `outputs.tf` | Outputs que consume el stack Canary y URL HTTPS de métricas |
 
 ## Inicializar y validar
 

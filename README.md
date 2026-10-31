@@ -165,27 +165,33 @@ Usamos Grafana Cloud como SaaS para evitar mantener otro clúster Prometheus/Gra
 
 ```bash
 terraform -chdir=terraform output -raw api_url
+terraform -chdir=terraform output -raw metrics_https_url
 ```
 
-3. Obtén el token que Terraform generó y guardó en Secrets Manager:
+La primera URL sigue siendo el endpoint normal del API detrás del ALB. La segunda es la URL HTTPS de CloudFront que Grafana usará para recolectar métricas. Terraform crea esta distribución con certificado HTTPS administrado por CloudFront, caché desactivada y reenvío de headers al ALB.
+
+3. Obtén el token que Terraform generó y guardó en Secrets Manager. No necesitas tener Terraform instalado en CloudShell para recuperarlo:
 
 ```bash
-terraform -chdir=terraform init -backend-config="bucket=$TF_STATE_BUCKET"
-terraform -chdir=terraform output -raw metrics_bearer_token
+aws secretsmanager get-secret-value \
+  --secret-id api-restful-veterinaria/metrics \
+  --region us-east-2 \
+  --query SecretString \
+  --output text
 ```
 
-Trátalo como contraseña. No lo guardes en Git. El mismo token se usa para autenticar las rutas de métricas y proteger la ruta de smoke-test Canary.
+Trátalo como contraseña. No lo guardes en Git ni lo compartas en chats. Este token se mantiene mientras se conserve el secreto de Secrets Manager; un `terraform destroy` total elimina el secreto y una instalación nueva genera otro.
 
-4. En Grafana Cloud, abre **Connections → Add connection → Metrics Endpoint** y crea dos scrape jobs autenticados con **Bearer Token**:
+4. En Grafana Cloud, abre **Connections → Add new connection → Metrics Endpoint**. Crea los jobs con la URL HTTPS de CloudFront y autenticación **Bearer**:
 
 | Job | URL | Autenticación |
 |---|---|---|
-| `veterinaria-stable` | `http://<ALB_DNS>/metrics/stable` | Bearer + token anterior |
-| `veterinaria-canary` | `http://<ALB_DNS>/metrics/canary` | Bearer + token anterior |
+| `veterinaria-stable` | `https://<CLOUDFRONT_DOMAIN>/metrics/stable` | Bearer + token de AWS, sin escribir el prefijo `Bearer` |
+| `veterinaria-canary` | `https://<CLOUDFRONT_DOMAIN>/metrics/canary` | Bearer + el mismo token de AWS |
 
-El primer endpoint siempre va al Target Group Stable y el segundo al Target Group Canary. Usa el intervalo recomendado de 60 segundos. Las rutas no mezclan las métricas de los tracks.
+El job Stable se puede guardar después de que CloudFront termine de desplegarse. El job Canary se debe crear o probar después de desplegar V3.1, porque esa versión crea la regla `/metrics/canary` en el ALB. Usa el intervalo de 1 minuto. Las rutas no mezclan las métricas de los tracks.
 
-5. En la tarjeta Prometheus de tu Stack, abre **Details** y copia el endpoint de consulta y el username. Crea un token de lectura con alcance `metrics:read`.
+5. En el Cloud Portal, dentro de tu Stack, abre la tarjeta **Prometheus → Details**. Copia el **Query endpoint** (no el Remote Write endpoint) y el **User** numérico. En esa misma página genera un token de lectura en **Password → Generate now**, con permiso `metrics:read`.
 6. Guarda estos tres valores en GitHub Actions Secrets:
 
 | Secret | Contenido |
@@ -196,7 +202,7 @@ El primer endpoint siempre va al Target Group Stable y el segundo al Target Grou
 
 7. Importa el dashboard: Grafana → **Dashboards → New → Import** → carga `observability/grafana-dashboard.json` → selecciona el datasource Prometheus del Stack.
 
-El dashboard presenta tráfico, 4xx/5xx, p50/p95/p99, saturación de CPU/memoria, lecturas/listados de citas por track y consultas del endpoint nuevo. El endpoint de métricas queda publicado por el ALB con autenticación Bearer. Este proyecto conserva el listener HTTP de la V3: úsalo solo para la práctica con un token aleatorio y temporal; en un despliegue real añade HTTPS con dominio y certificado ACM antes de enviar tokens por Internet.
+El dashboard presenta tráfico, 4xx/5xx, p50/p95/p99, saturación de CPU/memoria, lecturas/listados de citas por track y consultas del endpoint nuevo. El ALB conserva HTTP como origen, pero Grafana consulta la distribución CloudFront por HTTPS. CloudFront no almacena en caché las respuestas y reenvía el header Authorization. El token de AWS protege las rutas `/metrics/*`; el token de Grafana con `metrics:read` se usa separadamente para que GitHub Actions consulte Prometheus durante el quality gate.
 
 ## 6. Publicar V3.1 Canary
 

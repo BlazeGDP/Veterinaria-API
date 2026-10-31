@@ -108,3 +108,8 @@ output "stable_image_tag" {
   description = "Tag inmutable desplegado en Stable."
   value       = var.image_tag
 }
+
+output "metrics_https_url" {
+  description = "URL HTTPS de CloudFront para que Grafana Cloud recolecte métricas."
+  value       = "https://${aws_cloudfront_distribution.metrics.domain_name}"
+}
