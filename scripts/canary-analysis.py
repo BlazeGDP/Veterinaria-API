@@ -17,15 +17,9 @@ from typing import Any, Optional
 
 def query_prometheus(base_url: str, username: str, token: str, expression: str) -> Optional[float]:
     endpoint = base_url.rstrip("/")
-    if endpoint.endswith("/api/prom/api/v1/query"):
-        query_endpoint = endpoint
-    elif endpoint.endswith("/api/v1/query"):
-        query_endpoint = endpoint
-    elif endpoint.endswith("/api/prom"):
-        query_endpoint = endpoint + "/api/v1/query"
-    else:
-        query_endpoint = endpoint + "/api/prom/api/v1/query"
-    url = query_endpoint + "?" + urllib.parse.urlencode({"query": expression})
+    if not endpoint.endswith("/api/prom"):
+        endpoint += "/api/prom"
+    url = endpoint + "/api/v1/query?" + urllib.parse.urlencode({"query": expression})
     credentials = base64.b64encode(f"{username}:{token}".encode()).decode()
     request = urllib.request.Request(url, headers={"Authorization": f"Basic {credentials}", "Accept": "application/json"})
     with urllib.request.urlopen(request, timeout=25) as response:
@@ -64,6 +58,7 @@ def main() -> int:
     parser.add_argument("--slo", default="config/canary-slo.json")
     parser.add_argument("--window", default=None)
     parser.add_argument("--allow-no-baseline", action="store_true")
+    parser.add_argument("--load-report", default=None, help="JSON del generador de carga con conteos exactos por track")
     args = parser.parse_args()
 
     base_url = os.environ.get("GRAFANA_PROMETHEUS_URL", "").strip()
@@ -90,12 +85,42 @@ def main() -> int:
     def gauge(metric: str, track: str) -> Optional[float]:
         return query_prometheus(base_url, username, token, f'max_over_time({metric}{{track="{track}"}}[{window}])')
 
-    stable_total = q("http_requests_total", "stable") or 0.0
+    # Prometheus totals are retained for diagnosis, but sample size and HTTP status
+    # counts come from the load generator when a stage report is supplied. This avoids
+    # treating scrape cadence/ingestion gaps as if requests had never occurred.
+    stable_prometheus_total = q("http_requests_total", "stable") or 0.0
+    canary_prometheus_total = q("http_requests_total", "canary") or 0.0
+    stable_total = stable_prometheus_total
     stable_errors = q("http_requests_total", "stable", 'status_code=~"5.."') or 0.0
     stable_4xx = q("http_requests_total", "stable", 'status_code=~"4.."') or 0.0
-    canary_total = q("http_requests_total", "canary") or 0.0
+    canary_total = canary_prometheus_total
     canary_errors = q("http_requests_total", "canary", 'status_code=~"5.."') or 0.0
     canary_4xx = q("http_requests_total", "canary", 'status_code=~"4.."') or 0.0
+    sample_source = "grafana_prometheus_increase"
+    load_report: dict[str, Any] | None = None
+    if args.load_report:
+        load_report = json.loads(Path(args.load_report).read_text(encoding="utf-8"))
+        by_track = load_report.get("track_statuses")
+        if not isinstance(by_track, dict) or not isinstance(by_track.get("stable"), dict) or not isinstance(by_track.get("canary"), dict):
+            raise RuntimeError("El reporte de carga no contiene track_statuses para stable y canary; no se puede calcular una muestra fiable.")
+
+        def count_statuses(track_name: str, prefix: str | None = None) -> int:
+            total = 0
+            for status, count in by_track[track_name].items():
+                if prefix is None or str(status).startswith(prefix):
+                    try:
+                        total += int(count)
+                    except (TypeError, ValueError):
+                        raise RuntimeError(f"Conteo inválido en track_statuses.{track_name}.{status}")
+            return total
+
+        stable_total = count_statuses("stable")
+        stable_errors = count_statuses("stable", "5")
+        stable_4xx = count_statuses("stable", "4")
+        canary_total = count_statuses("canary")
+        canary_errors = count_statuses("canary", "5")
+        canary_4xx = count_statuses("canary", "4")
+        sample_source = "direct_load_test_response_headers"
 
     stable_p50 = quantile("stable", 0.50)
     stable_p95 = quantile("stable", 0.95)
@@ -120,8 +145,12 @@ def main() -> int:
 
     report: dict[str, Any] = {
         "window": window,
+        "sample_source": sample_source,
+        "metrics_source": "grafana_cloud_prometheus",
+        "http_sample_note": "El tamaño de muestra y los códigos HTTP se cuentan directamente desde las respuestas del generador; Prometheus aporta latencias, saturación y métricas de negocio.",
         "stable": {
             "requests": round(stable_total, 2),
+            "prometheus_requests_observed": round(stable_prometheus_total, 2),
             "5xx": round(stable_errors, 2),
             "4xx": round(stable_4xx, 2),
             "4xx_rate_percent": fmt(stable_4xx / stable_total if stable_total else 0.0, 100),
@@ -137,6 +166,7 @@ def main() -> int:
         },
         "canary": {
             "requests": round(canary_total, 2),
+            "prometheus_requests_observed": round(canary_prometheus_total, 2),
             "5xx": round(canary_errors, 2),
             "4xx": round(canary_4xx, 2),
             "4xx_rate_percent": fmt(canary_4xx / canary_total if canary_total else 0.0, 100),
@@ -156,6 +186,10 @@ def main() -> int:
     }
 
     reasons: list[str] = report["reasons"]
+    if load_report is not None:
+        report["load_test_network_errors"] = int(load_report.get("network_errors", 0))
+        report["load_test_network_error_rate_percent"] = float(load_report.get("network_error_rate_percent", 0.0))
+        report["load_test_unknown_track_responses"] = int(load_report.get("tracks", {}).get("unknown", 0))
     if canary_total > 0 and canary_error_rate > max(slo["maxCanary5xxRate"] * 3, 0.05):
         reasons.append("ABORT: la tasa 5xx de Canary supera el umbral crítico del 5%.")
     if canary_p95 is not None and canary_p95 > slo["maxP95Seconds"]:

@@ -51,10 +51,11 @@ assert_targets_healthy() {
 }
 
 wait_for_quality_gate() {
+  local load_report="$1"
   local elapsed=0 rc=2
   while (( elapsed <= MAX_SAMPLE_WAIT_SECONDS )); do
     set +e
-    python3 "$ROOT_DIR/scripts/canary-analysis.py" --window "$ANALYSIS_WINDOW"
+    python3 "$ROOT_DIR/scripts/canary-analysis.py" --window "$ANALYSIS_WINDOW" --load-report "$load_report"
     rc=$?
     set -e
     if [[ "$rc" -eq 0 ]]; then
@@ -91,6 +92,7 @@ for percentage in 10 50; do
   AWS_REGION="$AWS_REGION" bash "$ROOT_DIR/scripts/set-canary-traffic.sh" "$percentage"
 
   echo "Horneado: ${STAGE_DURATION_SECONDS}s | concurrencia: ${CONCURRENCY} | timeout HTTP: ${REQUEST_TIMEOUT}s"
+  LOAD_REPORT="${RUNNER_TEMP:-/tmp}/canary-load-${percentage}.json"
   if ! python3 "$ROOT_DIR/scripts/load-test.py" \
     --url "$API_URL" \
     --duration-seconds "$STAGE_DURATION_SECONDS" \
@@ -99,6 +101,7 @@ for percentage in 10 50; do
     --max-network-error-rate-percent "$MAX_NETWORK_ERROR_RATE_PERCENT" \
     --path "/appointments" \
     --close-connection \
+    --output-json "$LOAD_REPORT" \
     "${FAILURE_ARG[@]}"; then
     echo "ABORT: la prueba de carga superó el presupuesto de errores de transporte o falló."
     rollback
@@ -107,7 +110,7 @@ for percentage in 10 50; do
 
   echo "Esperando ${METRICS_SCRAPE_GRACE_SECONDS}s para que Grafana Cloud ingiera el scrape (jobs configurados a 30s)."
   sleep "$METRICS_SCRAPE_GRACE_SECONDS"
-  if ! wait_for_quality_gate; then exit 1; fi
+  if ! wait_for_quality_gate "$LOAD_REPORT"; then exit 1; fi
 done
 
 echo "=== Promoción final: 100% Canary ==="
