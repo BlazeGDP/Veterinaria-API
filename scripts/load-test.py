@@ -55,12 +55,15 @@ def duration_worker(
         "tracks": collections.Counter(),
         "versions": collections.Counter(),
         "statuses": collections.Counter(),
+        "network_error_examples": collections.Counter(),
     }
     while time.perf_counter() < deadline:
         item = one_request(url, failure_mode, canary_token, timeout)
         stats["tracks"][item["track"]] += 1
         stats["versions"][item["version"]] += 1
         stats["statuses"][str(item["status"])] += 1
+        if item.get("error"):
+            stats["network_error_examples"][item["error"]] += 1
     return stats
 
 
@@ -118,6 +121,9 @@ def main() -> int:
         tracks.update(item["track"] for item in results)
         statuses.update(str(item["status"]) for item in results)
         versions.update(item["version"] for item in results)
+        network_error_examples.update(
+            item["error"] for item in results if item.get("error")
+        )
         requested = len(results)
     elapsed = time.perf_counter() - started
     network_errors = statuses.get("network_error", 0)
@@ -139,6 +145,10 @@ def main() -> int:
         "versions": dict(versions),
         "statuses": dict(statuses),
         "network_errors": network_errors,
+        "network_error_examples": [
+            {"error": message, "count": count}
+            for message, count in network_error_examples.most_common(5)
+        ],
         "failure_injection": args.failure or "none",
     }, indent=2, ensure_ascii=False))
 

@@ -82,12 +82,16 @@ for percentage in 5 10 25 50; do
     FAILURE_ARG=(--failure "$INJECT_FAILURE" --canary-token "$CANARY_SMOKE_TOKEN")
   fi
   echo "Horneado con carga concurrente: ${STAGE_DURATION_SECONDS}s"
-  python3 "$ROOT_DIR/scripts/load-test.py" \
+  if ! python3 "$ROOT_DIR/scripts/load-test.py" \
     --url "$API_URL" \
     --duration-seconds "$STAGE_DURATION_SECONDS" \
     --concurrency "$CONCURRENCY" \
     --path "/appointments" \
-    "${FAILURE_ARG[@]}"
+    "${FAILURE_ARG[@]}"; then
+    echo "ABORT: la prueba de carga detectó errores de red o una condición inválida."
+    rollback
+    exit 1
+  fi
 
   echo "Esperando ${METRICS_SCRAPE_GRACE_SECONDS}s para el siguiente scrape de Grafana Cloud."
   sleep "$METRICS_SCRAPE_GRACE_SECONDS"

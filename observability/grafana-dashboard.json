@@ -100,8 +100,8 @@
     {
       "id": 2,
       "type": "stat",
-      "title": "Canary public traffic share",
-      "description": "Porcentaje observado de solicitudes atendidas por Canary; es tráfico real medido, no solo el peso configurado en ALB.",
+      "title": "Canary public traffic share (observed)",
+      "description": "Porcentaje calculado con las solicitudes recogidas por Prometheus. Si aparece 100% inesperadamente, revisar el panel de salud de los scrape jobs: puede faltar la serie Stable; no equivale al peso configurado en el ALB.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -172,7 +172,7 @@
       "id": 3,
       "type": "stat",
       "title": "HTTP 5xx error rate by track",
-      "description": "SLO Canary: máximo 1% de errores 5xx; sobre 5% es regresión crítica.",
+      "description": "Tasa 5xx por track. Muestra 0 cuando no se han observado errores 5xx; revisa también los errores de red del generador de carga, que no necesariamente llegan a generar una respuesta HTTP.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -228,7 +228,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "100 * sum by (track) (rate(http_requests_total{status_code=~\"5..\"}[5m])) / clamp_min(sum by (track) (rate(http_requests_total[5m])), 1e-9)",
+          "expr": "(100 * sum by (track) (rate(http_requests_total{status_code=~\"5..\"}[5m])) / clamp_min(sum by (track) (rate(http_requests_total[5m])), 1e-9)) or (0 * sum by (track) (rate(http_requests_total[5m])))",
           "legendFormat": "{{track}}",
           "instant": true,
           "range": false
@@ -1070,17 +1070,95 @@
           "range": true
         }
       ]
+    },
+    {
+      "id": 15,
+      "type": "stat",
+      "title": "Metrics scrape health by job",
+      "description": "up=1 significa que Grafana pudo recolectar métricas del job. Comprueba que aparecen veterinaria-stable y veterinaria-canary. Si falta Stable, el porcentaje Canary puede parecer 100% aunque el ALB siga ponderado.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 36,
+        "w": 12,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "name",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "min by (scrape_job) (up{job=~\"integrations/metrics_endpoint/.+\"})",
+          "legendFormat": "{{scrape_job}}",
+          "instant": true,
+          "range": false
+        }
+      ]
     }
   ],
   "refresh": "30s",
   "schemaVersion": 39,
   "tags": [
-    "veterinaria",
     "canary",
-    "stable",
+    "canary-rollout",
     "devops",
+    "scrape-health",
     "sli",
-    "slo"
+    "slo",
+    "stable",
+    "veterinaria",
+    "veterinaria-api"
   ],
   "templating": {
     "list": []
@@ -1091,7 +1169,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Veterinaria API — Canary vs Stable",
+  "title": "Veterinaria API — Stable vs Canary (rollout diagnostics)",
   "uid": "veterinaria-canary-stable-v2",
   "version": 1
 }

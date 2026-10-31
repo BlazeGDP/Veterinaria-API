@@ -390,3 +390,22 @@ El workflow ejecuta `bash ./scripts/canary-rollout.sh` y el script invoca `set-c
 Para ver las métricas del proyecto, importa `observability/grafana-dashboard.json` desde **Dashboards → New → Import** y selecciona el datasource Prometheus de tu Stack. El dashboard personalizado se llama **Veterinaria API — Canary vs Stable**. El dashboard **Metrics Endpoint Overview** es el tablero genérico de la integración y puedes conservarlo; no es el tablero de métricas de la API.
 
 El dashboard personalizado muestra solicitudes/s, porcentaje observado de tráfico Canary, tasas 4xx/5xx, latencia p50/p95/p99, saturación de CPU/memoria, tamaño de muestra en cinco minutos, consultas del listado de citas, citas creadas y llamadas al nuevo endpoint de resumen. Las métricas provienen de `src/observability/metrics.ts`.
+
+
+## Diagnóstico del rollout cuando la prueba de carga falla
+
+La prueba `load-test.py` devuelve código distinto de cero si encuentra errores de red. El rollout ahora captura ese resultado, ejecuta el rollback a 0% Canary y 100% Stable, y muestra hasta cinco causas de error de red con su frecuencia. Antes de volver a ejecutar la promoción, revise esas causas.
+
+En el dashboard, `Canary public traffic share (observed)` calcula la proporción a partir de las métricas efectivamente scrapeadas; no representa el peso configurado en el listener del ALB. El panel `Metrics scrape health by job` muestra `up=1` cuando cada scrape job está recolectando. Deben aparecer tanto `veterinaria-stable` como `veterinaria-canary` (según los nombres dados al crear los jobs).
+
+Para diagnosticar desde Grafana Explore también puede consultar:
+
+```promql
+sum by (scrape_job, track) (increase(http_requests_total[10m]))
+```
+
+```promql
+up{job=~"integrations/metrics_endpoint/.+"}
+```
+
+Si el job Stable no aparece o `up=0`, revise su URL `/metrics/stable`, el Bearer Token de AWS compartido y el estado del Target Group Stable.
