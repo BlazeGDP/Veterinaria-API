@@ -33,10 +33,11 @@ resource "aws_iam_role_policy" "ecs_secrets" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect   = "Allow"
-        Action   = ["secretsmanager:GetSecretValue"]
+        Effect = "Allow"
+        Action = ["secretsmanager:GetSecretValue"]
         Resource = [
           aws_secretsmanager_secret.db.arn,
+          aws_secretsmanager_secret.chaos.arn,
           aws_secretsmanager_secret.metrics.arn,
         ]
       }

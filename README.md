@@ -1,69 +1,61 @@
-# Rollout Canary compacto y diagnóstico de enrutamiento
+# Veterinaria V4 Ingeniería del Caos multicloud
 
-Reemplazar estos archivos en el repositorio, conservando `.git`:
+Entrega para dos integrantes. AWS aloja esta API; la otra nube aloja la API compañera. Versión 4.0.0. Empezar por [la guía completa de despliegue](docs/GUIA-DESPLIEGUE.md), que también cubre la otra nube y el orden de integración.
 
-- `.github/workflows/rollout-canary.yml`
-- `scripts/canary-rollout.sh`
-- `scripts/set-canary-traffic.sh`
-- `scripts/load-test.py`
-- `config/canary-slo.json`
+## Flujo y contratos
 
-## Plan reducido
+AWS coordina el flujo principal `GET /owners`, `/pets` o `/appointments`, también por ID numérico, hacia `GCP /juegos/raw`. GCP ofrece el flujo inverso desde juegos, jugadores y compras hacia `AWS /pets/raw`. Cada respuesta tiene `data` local y un único `juego` o `mascota` aleatorio, leído en esa petición. Sin caché. Un ID inexistente conserva 404. POST/PATCH/DELETE no cambian. Las rutas raw evitan recursión y no hacen composición. Los alias `/api/v2` y `/api/v3` de GCP se conservan como rutas, pero sus GET adoptan el contrato V4; los consumidores deben actualizarse.
 
-El rollout utiliza las etapas públicas 10% -> 50% -> 100%. Esto cubre los rangos exigidos por la rúbrica: 5-10%, 25-50% y 100% promovido.
-
-- Dos etapas de horneado de 120 segundos (configurable a 150 o 180 en Actions).
-- Concurrencia por defecto: 10.
-- Scrape de Grafana: 60 segundos; espera posterior: 15 segundos.
-- Ventana de análisis: 2 minutos.
-- Muestra mínima por versión: 150.
-- Wilson 95%, 5xx, latencia y saturación permanecen activos.
-- Espera máxima adicional por métricas: 45 segundos por etapa.
-- Verificación final: 40 peticiones secuenciales con `Connection: close`.
-- Se deshabilita explícitamente la stickiness del forward action y se leen los pesos del listener después de modificarlo.
-
-Tiempo esperado: 5 a 8 minutos, dependiendo de la respuesta de Grafana Cloud y del tiempo de inicialización del workflow. No es posible garantizar promoción si faltan muestras o una métrica viola los SLO.
-
-## Reporte de Grafana
-
-El JSON de cada Quality Gate lo imprime `scripts/canary-analysis.py` en los logs de GitHub Actions, dentro del paso `Run progressive rollout and statistical gates`. En Grafana, el dashboard muestra las series visuales. Para revisar manualmente, abre Explore -> Prometheus y consulta por ejemplo:
-
-```promql
-sum by (track) (increase(http_requests_total[2m]))
+```mermaid
+flowchart TD
+    K["k6 y Chaos Toolkit — mide E2E"] --> A["AWS ALB y ECS — Veterinaria"]
+    A --> D["RDS — datos locales"]
+    A --> F["Fallo AWS — latencia saliente 3000 ms"]
+    F --> G["GCP GKE — 2 réplicas de Videojuegos"]
+    G --> S["Cloud SQL — juegos actuales"]
+    G -. "Flujo inverso independiente" .-> X["Fallo GCP — 503 sólo en mascotas raw AWS"]
+    X --> A
 ```
 
-```promql
-sum by (track) (increase(http_requests_total{status_code=~"5.."}[2m]))
-```
+Las flechas de ida y vuelta representan dos peticiones independientes: una llamada raw termina en esa nube y no vuelve a invocar a su compañera. Frontera del radio de impacto: solicitudes sintéticas GET que portan token y vencimiento; no toda la infraestructura ni todas las peticiones. k6 mide fuera de las APIs, en el cliente que ejecuta la prueba. Cada API registra spans JSON con traceId, parentSpanId, duración y resultado en CloudWatch o logs de GKE. RDS y Cloud SQL quedan fuera de la inyección.
 
-```promql
-histogram_quantile(0.95, sum by (le, track) (rate(http_request_duration_seconds_bucket[2m])))
-```
+## Matriz de responsabilidades
 
-## Si falla la verificación de 100%
+| Integrante | Fallo propio | Métrica objetivo | Protección aplicada |
+|---|---|---|---|
+| Veterinaria AWS | 3000 ms en llamada saliente a juegos GCP | p95 extremo a extremo <1500 ms | Timeout de 800 ms + respuesta parcial sin caché |
+| Videojuegos GCP | 503 sostenido de mascotas AWS para solicitudes de prueba | Error del servicio local <=1% | Timeout de 800 ms + respuesta parcial sin caché |
 
-El rollout imprime todas las reglas del listener. Una regla de prioridad superior que coincida con `/appointments` puede enrutar ese path con su propia acción y no usar la acción predeterminada. Inspecciona esa salida antes de volver a ejecutar.
+La ubicación física del 503 es el endpoint de mascotas AWS, pero el experimento y la hipótesis pertenecen a GCP, que consume esa dependencia. Ronda 0 usa límite de seguridad de 6 s y propaga fallo como 502. Ronda 1 usa 800 ms y conserva datos locales. No se afirma que una respuesta parcial cumpla el flujo completo: se mide `integration_complete` por separado. Las dos métricas son propuestas acordables antes de ejecutar, no valores ya medidos en nube.
 
-También puedes consultar desde CloudShell:
+## Qué se conserva y qué se retira
+
+AWS conserva aplicación NestJS/TypeORM, entidades, RDS, VPC, ALB, ECS, secretos, logs y CloudFront. GCP conserva FastAPI/SQLAlchemy, las tres entidades, Cloud SQL y Artifact Registry; el despliegue activo V4 usa GKE Autopilot con dos réplicas, probes HTTP y límites. Se retira el tráfico ponderado canary y sus workflows; se mantiene el historial Git. No se reconstruyen cola, caché ni almacenamiento de objetos de V2. S3/GCS sirven únicamente al estado Terraform. El módulo Cloud Run se conserva como opción de transición y está deshabilitado por defecto. La guía explica cómo reutilizar estado y esquemas existentes.
+
+## Código del experimento y pruebas
+
+- `chaos/`: experimento declarativo Chaos Toolkit con hipótesis, radio, tiempo, abortos y rollback.
+- `chaos_actions.py`: ejecuta mediciones, verifica control independiente y gate.
+- `load/profile.js`: 15 s de subida a 5 VU, 60 s constantes y 15 s de bajada; mismo perfil en todas las rondas.
+- `scripts/chaos-gate.sh`: mide estado estable, ronda 0, ronda 1 y recuperación.
+- `scripts/report-v4.py`: comparación, tablero HTML e informe preliminar a partir de datos reales.
+- `observability/v4`: Grafana, Prometheus y Pushgateway opcionales, sin depender de Grafana Cloud.
+- `tests-v4`: pruebas de integración local y del comportamiento de fallos.
 
 ```bash
-ALB_DNS='api-restful-veterinaria-alb-743336797.us-east-2.elb.amazonaws.com'
-ALB_ARN=$(aws elbv2 describe-load-balancers --region us-east-2 \
-  --query "LoadBalancers[?DNSName=='${ALB_DNS}'].LoadBalancerArn | [0]" --output text)
-LISTENER_ARN=$(aws elbv2 describe-listeners --region us-east-2 \
-  --load-balancer-arn "$ALB_ARN" \
-  --query 'Listeners[?Port==`80`].ListenerArn | [0]' --output text)
-aws elbv2 describe-rules --region us-east-2 --listener-arn "$LISTENER_ARN" \
-  --query 'Rules[].{Priority:Priority,IsDefault:IsDefault,Conditions:Conditions,Actions:Actions}' \
-  --output json
+npm ci && npm run build && node --test tests-v4/integration.cjs
 ```
 
-## Instalar
+Los tests heredados de GCP en `tests/` se retiraron del paquete V4 porque esperaban el contrato anterior y una base PostgreSQL externa. La prueba V4 usa SQLite aislado y servidor HTTP de dependencia; no reemplaza la verificación PostgreSQL/GKE desplegada. En AWS la prueba usa Fastify y el middleware real con handlers locales de fixture; el despliegue debe comprobar además NestJS, TypeORM y RDS.
 
-```powershell
-git add .github/workflows/rollout-canary.yml scripts/canary-rollout.sh scripts/set-canary-traffic.sh scripts/load-test.py config/canary-slo.json
-git commit -m ":rocket: optimize canary rollout duration and verify 100 percent routing"
-git push origin main
-```
+## Evidencia y límites
 
-El workflow sigue siendo manual (`workflow_dispatch`). No requiere reconstruir ni desplegar las APIs.
+Ver [matriz de rúbrica](docs/MATRIZ-RUBRICA.md), [sustentación](docs/SUSTENTACION.md) y [validación](docs/VALIDACION.md). No hay evidencias reales de sus cuentas ni un estado estable medido en nube precargados. La ejecución genera los archivos dentro de `evidence/`; conservar la ejecución final en Git con `git add -f` y completar el diagnóstico. El informe final no debe superar seis páginas.
+
+La inyección requiere ventana acordada y datos sintéticos en infraestructura propia. Se usa token >=32 caracteres, activación explícita en entorno y TTL de 15 s por petición del generador; no se guardan secretos en código. La reversión consiste en dejar de emitir cabeceras, esperar el límite de las peticiones en curso y verificar un GET completo. La guía incluye apagado y destrucción.
+
+## Versionado y fuentes
+
+Todos los commits del trabajo deben empezar con GitMoji. Publicar tag SemVer `v4.0.0` y release usando el workflow incluido después de registrar evidencia real. Herramienta de apoyo: ChatGPT; propuso timeout y degradación sin caché. Se descartaron caché y reintentos para respetar realtime y no amplificar el fallo.
+
+Fuentes técnicas: [Chaos Toolkit](https://chaostoolkit.org/reference/api/experiment/), [GKE y Cloud SQL](https://docs.cloud.google.com/sql/docs/postgres/connect-kubernetes-engine), [k6 thresholds](https://grafana.com/docs/k6/latest/using-k6/thresholds/).

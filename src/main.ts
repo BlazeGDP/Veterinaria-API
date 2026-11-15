@@ -1,3 +1,4 @@
+import { installMulticloud } from './multicloud';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import {
@@ -6,13 +7,13 @@ import {
 } from '@nestjs/platform-fastify';
 
 import { AppModule } from './app.module';
-import { CanaryFailureInterceptor } from './observability/canary-failure.interceptor';
 import { recordHttpRequest } from './observability/metrics';
 
 async function bootstrap() {
   const fastifyAdapter = new FastifyAdapter();
 
   const fastify = fastifyAdapter.getInstance();
+  installMulticloud(fastify);
 
   fastify.addHook('onRequest', async (request) => {
     (request as typeof request & { __startedAt?: bigint }).__startedAt = process.hrtime.bigint();
@@ -45,7 +46,7 @@ async function bootstrap() {
       fastifyAdapter,
     );
 
-  app.useGlobalInterceptors(new CanaryFailureInterceptor());
+
 
   app.useGlobalPipes(
     new ValidationPipe({

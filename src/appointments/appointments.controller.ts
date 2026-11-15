@@ -37,9 +37,6 @@ export class AppointmentsController {
     @Query('desde') desde?: string,
     @Query('hasta') hasta?: string,
   ) {
-    if (process.env.CANARY_FEATURE_ENABLED !== 'true') {
-      throw new NotFoundException('Endpoint disponible en api/v3.1 Canary');
-    }
     return this.appointmentsService.getSummary(desde, hasta);
   }
 

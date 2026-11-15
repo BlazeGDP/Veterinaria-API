@@ -1,0 +1,16 @@
+name: V4 local integration tests
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci
+      - run: npm run build
+      - run: node --test tests-v4/integration.cjs
+      - run: PYTHONPATH=. python -m unittest discover -s tests-v4 -p test_gate.py

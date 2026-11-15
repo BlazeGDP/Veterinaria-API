@@ -1,4 +1,4 @@
-ARG APP_VERSION=3.0.0
+ARG APP_VERSION=4.0.0
 
 FROM node:24-alpine AS builder
 
@@ -12,7 +12,7 @@ RUN npm run build
 
 FROM node:24-alpine AS production
 
-ARG APP_VERSION=3.0.0
+ARG APP_VERSION=4.0.0
 LABEL org.opencontainers.image.version="${APP_VERSION}"
 
 WORKDIR /app
@@ -28,4 +28,4 @@ COPY --from=builder /app/scripts/init-database.js ./scripts/init-database.js
 
 EXPOSE 3000
 
-CMD ["node", "dist/main.js"]
+CMD ["sh", "-c", "node scripts/init-database.js && node dist/main.js"]

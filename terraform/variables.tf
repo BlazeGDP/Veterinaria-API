@@ -7,7 +7,7 @@ variable "aws_region" {
 variable "environment" {
   description = "Ambiente de despliegue."
   type        = string
-  default     = "v3"
+  default     = "v4"
 }
 
 variable "project_name" {
@@ -85,5 +85,5 @@ variable "image_tag" {
 variable "api_version" {
   description = "Versión semántica publicada por la API estable."
   type        = string
-  default     = "3.0.0"
+  default     = "4.0.0"
 }

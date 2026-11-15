@@ -1,0 +1,6 @@
+aws_region = "us-east-2"
+api_version = "4.0.0"
+image_tag = "v4.0.0"
+peer_api_url = ""
+chaos_enabled = false
+# export TF_VAR_chaos_token=<TOKEN_COMPARTIDO>; no se guarda aquí.

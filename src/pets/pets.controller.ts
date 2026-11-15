@@ -32,6 +32,9 @@ export class PetsController {
     return this.petsService.findAll(especie, ownerId);
   }
 
+  @Get('raw')
+  raw(): Promise<Pet[]> { return this.petsService.findAll(); }
+
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number): Promise<Pet> {
     return this.petsService.findOne(id.toString());
