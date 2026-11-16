@@ -10,7 +10,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: v4-chaos
+  group: veterinaria-v4-infrastructure
   cancel-in-progress: false
 jobs:
   experiment:

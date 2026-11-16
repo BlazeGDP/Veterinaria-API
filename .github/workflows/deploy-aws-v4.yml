@@ -1,0 +1,91 @@
+name: AWS V4 Deploy
+on:
+  workflow_dispatch:
+    inputs:
+      seed_demo:
+        description: Crear o reutilizar owner mascota y cita sintéticos
+        type: boolean
+        default: true
+      enable_chaos:
+        description: Habilitar caos sólo durante una ventana acordada
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: veterinaria-v4-infrastructure
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      AWS_REGION: us-east-2
+      AWS_DEFAULT_REGION: us-east-2
+      AWS_PAGER: ''
+      TF_IN_AUTOMATION: 'true'
+      TF_INPUT: 'false'
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      TF_VAR_aws_region: us-east-2
+      TF_VAR_api_version: '4.0.0'
+      TF_VAR_chaos_token: ${{ secrets.CHAOS_TOKEN }}
+      TF_VAR_peer_api_url: ${{ vars.GCP_API_URL }}
+      TF_VAR_chaos_enabled: ${{ inputs.enable_chaos }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check required configuration
+        env:
+          EXPECTED_ACCOUNT: ${{ vars.AWS_ACCOUNT_ID }}
+        run: |
+          test -n "$TF_STATE_BUCKET"
+          test ${#TF_VAR_chaos_token} -ge 32
+          [[ "$EXPECTED_ACCOUNT" =~ ^[0-9]{12}$ ]]
+          echo "TF_VAR_image_tag=v4-${GITHUB_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile and test before changing AWS
+        run: |
+          npm ci
+          npm run build
+          node --test tests-v4/integration.cjs
+          PYTHONPATH=. python -m unittest discover -s tests-v4 -p 'test_*.py'
+      - uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-2
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.11.4'
+          terraform_wrapper: false
+      - name: Deploy ECR image and Terraform infrastructure
+        run: bash scripts/deploy-v4.sh
+      - name: Verify and populate synthetic demo data
+        env:
+          SEED_DEMO: ${{ inputs.seed_demo }}
+        run: |
+          export AWS_API_URL=$(terraform -chdir=terraform output -raw api_url)
+          python3 scripts/verify-aws-v4.py
+      - name: Publish deployment URLs
+        if: success()
+        run: |
+          URL=$(terraform -chdir=terraform output -raw api_url)
+          HTTPS_URL=$(terraform -chdir=terraform output -raw metrics_https_url)
+          {
+            echo '## Veterinaria V4 desplegada'
+            printf 'API: %s\n\nHTTPS para GET: %s\n\n' "$URL" "$HTTPS_URL"
+            printf 'Commit: %s\n\nImagen: %s\n\n' "$GITHUB_SHA" "$TF_VAR_image_tag"
+            echo 'Actualizar CHAOS_BASE_URL de este repositorio y PEER_API_URL de GCP con esta URL.'
+            echo 'Conservar este resumen junto con la evidencia de pruebas. La URL puede cambiar tras destruir.'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: ECS diagnostics on failure
+        if: failure()
+        run: |
+          aws ecs describe-services --cluster api-restful-veterinaria-cluster --services api-restful-veterinaria-service --query 'services[0].events[:10]' || true
+          aws logs tail /ecs/api-restful-veterinaria --since 10m --format short || true

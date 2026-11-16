@@ -1,0 +1,74 @@
+name: AWS V4 Destroy
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Escribe DESTRUIR — elimina también RDS y sus datos de prueba
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: veterinaria-v4-infrastructure
+  cancel-in-progress: false
+jobs:
+  destroy:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      AWS_REGION: us-east-2
+      AWS_DEFAULT_REGION: us-east-2
+      AWS_PAGER: ''
+      TF_IN_AUTOMATION: 'true'
+      TF_INPUT: 'false'
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      TF_VAR_aws_region: us-east-2
+      TF_VAR_chaos_token: ${{ secrets.CHAOS_TOKEN }}
+      TF_VAR_peer_api_url: ${{ vars.GCP_API_URL }}
+      TF_VAR_chaos_enabled: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check explicit destruction input
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          EXPECTED_ACCOUNT: ${{ vars.AWS_ACCOUNT_ID }}
+        run: |
+          [[ "$CONFIRMATION" == DESTRUIR ]]
+          test -n "$TF_STATE_BUCKET"
+          test ${#TF_VAR_chaos_token} -ge 32
+          [[ "$EXPECTED_ACCOUNT" =~ ^[0-9]{12}$ ]]
+      - uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-2
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.11.4'
+          terraform_wrapper: false
+      - name: Destroy only this Terraform stack and check state
+        run: |
+          terraform -chdir=terraform init -reconfigure -backend-config="bucket=$TF_STATE_BUCKET"
+          terraform -chdir=terraform destroy -auto-approve -lock-timeout=5m
+          REMAINING=$(terraform -chdir=terraform state list | grep -v '^data\.' || true)
+          if [ -n "$REMAINING" ]; then
+            printf 'Recursos aún en estado:\n%s\n' "$REMAINING"
+            exit 1
+          fi
+      - name: Remove exact automatic Container Insights log group
+        run: |
+          GROUP='/aws/ecs/containerinsights/api-restful-veterinaria-cluster/performance'
+          FOUND=$(aws logs describe-log-groups --log-group-name-prefix "$GROUP" --query 'logGroups[].logGroupName' --output text)
+          if printf '%s\n' "$FOUND" | tr '\t' '\n' | grep -Fxq "$GROUP"; then
+            aws logs delete-log-group --log-group-name "$GROUP"
+          fi
+      - name: Summary
+        run: |
+          {
+            echo '## Infraestructura V4 destruida'
+            echo 'RDS y datos sintéticos eliminados; ECR y sus imágenes eliminados.'
+            echo 'Se conservaron el bucket S3 con versiones de estado y la identidad IAM de GitHub, creados fuera de este stack.'
+            echo 'El próximo Deploy reconstruye desde Git y puede crear URLs distintas. Revisar recursos de otras versiones por separado.'
+          } >> "$GITHUB_STEP_SUMMARY"
