@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+export PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}"
+
+test -f chaos_actions.py || {
+  echo "ERROR: falta chaos_actions.py en la raíz del repositorio"
+  exit 1
+}
+
+python3 -c "import chaos_actions; print('Módulo cargado:', chaos_actions.__file__)"
 export EXPERIMENT=aws-latency
 export RUN_ID=${RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}
 export FLOW_PATH=${FLOW_PATH:-/owners}
