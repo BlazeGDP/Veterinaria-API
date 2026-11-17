@@ -1,0 +1,37 @@
+name: Defense-in-depth security gate (offline unit fixtures)
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'src/security/**'
+      - 'src/multicloud.ts'
+      - 'security/**'
+      - 'tests-security/**'
+      - '.github/workflows/security-gate.yml'
+  pull_request:
+    paths:
+      - 'src/security/**'
+      - 'src/multicloud.ts'
+      - 'security/**'
+      - 'tests-security/**'
+permissions:
+  contents: read
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: npm ci && npm run build
+      - run: node --test tests-security/identity.test.cjs
+      - run: PYTHONPATH=. python -m unittest discover -s tests-security -p 'test_*.py'
+      - run: python security/offline_gate.py --out evidence/security-offline-gate.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aws-security-offline-gate
+          path: evidence/security-offline-gate.json

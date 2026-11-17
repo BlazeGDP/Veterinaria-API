@@ -1,0 +1,3 @@
+{"event":"security_event","experiment":"identity","outcome":"denied","reason":"wrong_issuer_or_audience","traceId":"00000000000000000000000000000001","expectedAlert":true}
+{"event":"security_event","experiment":"identity","outcome":"allowed","reason":"valid_scoped_proof","traceId":"00000000000000000000000000000002","expectedAlert":false}
+{"event":"server_span","experiment":"identity","status":200,"expectedAlert":false}

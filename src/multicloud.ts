@@ -1,4 +1,5 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { checkMachineRequest } from './security/service-auth';
 const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
 function authorized(req: any): boolean {
   const token = process.env.CHAOS_TOKEN || '';
@@ -16,6 +17,19 @@ export function installMulticloud(server: any) {
     req.spanId = randomBytes(8).toString('hex');
     req.traceparent = `00-${req.traceId}-${req.spanId}-01`;
     req.v4Start = Date.now();
+    // Only the raw intercloud dependency requires a machine proof when opted in.
+    // Existing health, composition and load-test endpoints retain their routes.
+    if (req.method === 'GET' && req.url.split('?')[0] === '/pets/raw') {
+      const decision = checkMachineRequest(req);
+      console.log(JSON.stringify({ event:'security_event', experiment:'identity', cloud:'aws',
+        traceId:req.traceId, timestamp:new Date().toISOString(),
+        technique:'T1550.001', action:'machine_auth', mode:decision.mode,
+        outcome:decision.allowed?'allowed':'denied', reason:decision.reason }));
+      if (!decision.allowed) {
+        reply.header('X-Trace-Id',req.traceId);
+        return reply.code(401).send({error:'machine_identity_denied',traceId:req.traceId});
+      }
+    }
     reply.header('Cache-Control', 'no-store');
     reply.header('X-Trace-Id', req.traceId).header('traceparent', req.traceparent);
     if (req.url.split('?')[0] === '/pets/raw' && authorized(req) && req.headers['x-chaos-fault'] === 'unavailable') {

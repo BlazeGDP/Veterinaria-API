@@ -36,6 +36,7 @@ resource "aws_ecs_task_definition" "api" {
       environment = [
         { name = "PEER_API_URL", value = var.peer_api_url },
         { name = "CHAOS_ENABLED", value = tostring(var.chaos_enabled) },
+        { name = "SECURITY_AUTH_MODE", value = var.security_auth_mode },
         {
           name  = "NODE_ENV"
           value = "production"
@@ -88,6 +89,7 @@ resource "aws_ecs_task_definition" "api" {
 
       secrets = [
         { name = "CHAOS_TOKEN", valueFrom = aws_secretsmanager_secret.chaos.arn },
+        { name = "SERVICE_AUTH_SECRET", valueFrom = aws_secretsmanager_secret.security_identity.arn },
         {
           name      = "DATABASE_USER"
           valueFrom = "${aws_secretsmanager_secret.db.arn}:username::"
@@ -116,6 +118,7 @@ resource "aws_ecs_task_definition" "api" {
   depends_on = [
     aws_secretsmanager_secret_version.db,
     aws_secretsmanager_secret_version.chaos,
+    aws_secretsmanager_secret_version.security_identity,
     aws_secretsmanager_secret_version.metrics,
   ]
 

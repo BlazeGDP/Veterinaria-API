@@ -39,6 +39,7 @@ resource "aws_iam_role_policy" "ecs_secrets" {
           aws_secretsmanager_secret.db.arn,
           aws_secretsmanager_secret.chaos.arn,
           aws_secretsmanager_secret.metrics.arn,
+          aws_secretsmanager_secret.security_identity.arn,
         ]
       }
     ]

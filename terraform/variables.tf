@@ -87,3 +87,20 @@ variable "api_version" {
   type        = string
   default     = "4.0.0"
 }
+
+# Defense-in-depth opt-in: 'off' preserves the running V4 integration until
+# both clouds are deployed with the same machine-proof signing secret.
+variable "security_auth_mode" {
+  description = "off | baseline | protected for the synthetic identity game day"
+  type        = string
+  default     = "off"
+  validation {
+    condition     = contains(["off", "baseline", "protected"], var.security_auth_mode)
+    error_message = "security_auth_mode must be off, baseline or protected"
+  }
+}
+variable "enable_security_alerts" {
+  type        = bool
+  description = "Opt in to new CloudWatch game-day alarm (default false for safe rollout)"
+  default     = false
+}
